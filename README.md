@@ -60,7 +60,7 @@ Submissions will be evaluated on:
 1. **Model Performance**: Most importantly, the improvement in validation loss compared to the baseline.
 2. **Code Quality**: Clean, maintainable, and well-documented code.
 3. **Innovation**: Creative or insightful approaches to optimization.
-4. **Documentation**: A short report.pdf that walks through the changes you made, your reasoning, and their effect on the training curves.
+4. **Documentation**: A short report.pdf that walks through the changes you made, your reasoning, and their effect on the training curves. Place the report in the mainrun folder before submitting.
 
 ## Legal and Contributing
 By participating and submitting your work, you agree to the terms outlined in our [Legal Notice](LEGAL-NOTICE.md). This includes the assignment of all intellectual property rights in your submission to Maincode Pty Ltd.

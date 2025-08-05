@@ -6,8 +6,13 @@ tasks:
     cmds:
       - npx zx checkpoint.mjs
 
+  download:
+    dir: mainrun
+    cmds:
+      - python3 download_dataset.py
+
   train:
-    deps: [checkpoint]
+    deps: [checkpoint, download]
     dir: mainrun
     cmds:
       - python3 train.py
