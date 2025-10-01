@@ -1,0 +1,19 @@
+---
+alwaysApply: true
+---
+# HARD CONSTRAINTS (do NOT change)
+- Epochs = 7
+- Random seed
+- Dataset & validation fraction
+- The `evaluate()` function (definition and call sites)
+
+# ALLOWED CHANGES
+- Tokenizer & packing
+- Model internals (Pre-LN, RoPE, MLP act)
+- Optimizer, LR schedule, weight decay, grad clip
+- AMP, grad accumulation, torch.compile
+- Logging & configs (but not inside evaluate())
+
+# HOUSE STYLE
+- Small, reviewable diffs with: PLAN → RISKS → DIFF PLAN → TESTS
+- If a request risks violating constraints: STOP and propose alternatives.
