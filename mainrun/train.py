@@ -11,6 +11,7 @@ from datasets import load_dataset
 from tokenizers import Tokenizer, models, trainers, pre_tokenizers, decoders
 from tqdm import tqdm
 import structlog
+from torch.utils.tensorboard import SummaryWriter
 
 @dataclass
 class Hyperparameters:
@@ -265,6 +266,13 @@ def main():
     opt = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max_steps)
 
+    # TensorBoard writer (observability only; no training behavior change)
+    tb_dir = Path("./logs/tb")
+    tb_dir.mkdir(parents=True, exist_ok=True)
+    run_name = time.strftime("run_%Y-%m-%dT%H-%M-%S")
+    tb_writer = SummaryWriter(log_dir=str(tb_dir / run_name))
+    tokens_per_step = args.batch_size * args.block_size
+
     def evaluate():
         model.eval()
         losses = 0.0
@@ -280,8 +288,10 @@ def main():
     ptr = 0
     step = 0
     t0 = time.time()
+    epoch_t0 = t0
     for epoch in range(1, args.epochs + 1):
         for _ in tqdm(range(1, batches + 1), desc=f"Epoch {epoch}/{args.epochs}"):
+            t_step_start = time.time()
             step += 1
             xb, yb, ptr = get_batch(train_ids, ptr, args.block_size, args.batch_size, device)
             _, loss = model(xb, yb)
@@ -292,6 +302,13 @@ def main():
             scheduler.step()
 
             elapsed = time.time() - t0
+            # TensorBoard: train scalars per step
+            current_lr = float(opt.param_groups[0]["lr"])
+            tb_writer.add_scalar("loss/train", float(loss.item()), global_step=step)
+            tb_writer.add_scalar("lr", current_lr, global_step=step)
+            # Optional instantaneous speed (tokens/sec) per step
+            step_dt = max(time.time() - t_step_start, 1e-8)
+            tb_writer.add_scalar("speed/tokens_per_sec_step", float(tokens_per_step) / step_dt, global_step=step)
             logger.log("training_step",
                       step=step,
                       max_steps=max_steps,
@@ -301,6 +318,14 @@ def main():
 
             if step == 1 or step % eval_interval == 0 or step == max_steps:
                 val_loss = evaluate()
+                # TensorBoard: validation loss per epoch boundary
+                if step % batches == 0:
+                    tb_writer.add_scalar("loss/val", float(val_loss), global_step=epoch)
+                    # Epoch speed metric
+                    epoch_time = max(time.time() - epoch_t0, 1e-8)
+                    epoch_tokens = batches * tokens_per_step
+                    tb_writer.add_scalar("speed/tokens_per_sec", float(epoch_tokens / epoch_time), global_step=epoch)
+                    epoch_t0 = time.time()
                 logger.log("validation_step",
                           step=step,
                           max_steps=max_steps,
@@ -313,3 +338,9 @@ if __name__ == "__main__":
     finally:
         if logger and hasattr(logger, 'file_handler'):
             logger.file_handler.close()
+        # Best-effort close for TensorBoard writer if present
+        try:
+            if 'tb_writer' in globals() and tb_writer:
+                tb_writer.close()
+        except Exception:
+            pass
