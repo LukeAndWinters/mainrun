@@ -22,4 +22,31 @@ tasks:
     dir: scripts
     cmds:
       - npx zx submit.mjs
-    
+
+  tb:
+    desc: "Launch TensorBoard on 0.0.0.0:6006 (Docker-friendly)"
+    cmds:
+      - python3 -m tensorboard.main --logdir logs --port ${PORT} --bind_all
+    env:
+      PORT: 6006
+
+  tb-local:
+    desc: "Launch TensorBoard on localhost:6006 (for direct container access)"
+    cmds:
+      - python3 -m tensorboard.main --logdir logs --host localhost --port ${PORT}
+    env:
+      PORT: 6006
+
+  snapshot:
+    desc: "Export TB scalars to PNG/CSV and append CHANGELOG"
+    cmds:
+      - python3 scripts/export_scalars.py --run_dir {{.RUN_DIR}} --out_dir docs/figures
+      - python3 scripts/append_changelog.py --exp_name {{.EXP}} --title "{{.TITLE}}" --change "{{.CHANGE}}" --rationale "{{.WHY}}" --settings "{{.SETTINGS}}" --best_val {{.BEST}}
+    vars:
+      RUN_DIR: '{{default "logs/latest" .RUN_DIR}}'
+      EXP: '{{default "exp" .EXP}}'
+      TITLE: '{{default "iteration" .TITLE}}'
+      CHANGE: '{{default "n/a" .CHANGE}}'
+      WHY: '{{default "n/a" .WHY}}'
+      SETTINGS: '{{default "" .SETTINGS}}'
+      BEST: '{{default "0.0" .BEST}}'
