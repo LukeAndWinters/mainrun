@@ -285,10 +285,24 @@ def main():
     model_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.log("model_info", parameters_count=model_params)
     
-    # set up SummaryWriter earlier: writer = SummaryWriter(log_dir=run_dir)
-    run_dir = Path("./logs")
-    run_dir.mkdir(exist_ok=True)
+    # set up a per-run directory under mainrun/runs with a stable symlink 'latest'
+    # This does not change training logic; only organizes outputs for TB/reporting.
+    runs_root = Path("mainrun/runs")
+    runs_root.mkdir(parents=True, exist_ok=True)
+    run_id = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
+    run_dir = runs_root / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    # Initialize TensorBoard SummaryWriter to this specific run directory
     writer = SummaryWriter(log_dir=run_dir)
+    # Maintain/update a 'latest' symlink for convenience (best-effort on non-Windows)
+    latest_link = runs_root / "latest"
+    try:
+        if latest_link.exists() or latest_link.is_symlink():
+            latest_link.unlink()
+        latest_link.symlink_to(run_dir, target_is_directory=True)
+    except Exception:
+        # On filesystems without symlink support, skip silently
+        pass
     
     # once at startup
     param_count = sum(p.numel() for p in model.parameters())
@@ -297,6 +311,28 @@ def main():
     
     opt = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max_steps)
+
+    # Persist immutable run metadata for reporting
+    try:
+        (run_dir / "run.json").write_text(json.dumps({
+            "run_id": run_id,
+            "device": device,
+            "epochs": args.epochs,
+            "seed": args.seed,
+            "val_fraction": args.val_frac,
+            "block_size": args.block_size,
+            "batch_size": args.batch_size,
+            "vocab_size": tok.vocab_size,
+            "n_layer": args.n_layer,
+            "n_head": args.n_head,
+            "d_model": args.d_model,
+            "dropout": args.dropout,
+            "lr": args.lr,
+            "weight_decay": args.weight_decay,
+            "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }, indent=2))
+    except Exception:
+        pass
 
     def evaluate():
         model.eval()
@@ -313,6 +349,7 @@ def main():
     ptr = 0
     step = 0
     t0 = time.time()
+    best_val = float("inf")
     for epoch in range(1, args.epochs + 1):
         for _ in tqdm(range(1, batches + 1), desc=f"Epoch {epoch}/{args.epochs}"):
             step += 1
@@ -341,6 +378,8 @@ def main():
 
             if step == 1 or step % eval_interval == 0 or step == max_steps:
                 val_loss = evaluate()
+                if val_loss < best_val:
+                    best_val = val_loss
                 
                 # after each validation
                 import math
@@ -353,6 +392,14 @@ def main():
                           max_steps=max_steps,
                           loss=val_loss,
                           elapsed_time=elapsed)
+
+    # Persist best validation result for this run
+    try:
+        (run_dir / "result.json").write_text(json.dumps({
+            "best_val_loss": float(best_val)
+        }, indent=2))
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     try:
