@@ -17,4 +17,6 @@ node_modules/
 .idea/
 
 .DS_Store
-Thumbs.db
+Thumbs.dbmainrun/runs/
+docs/figures/*.csv
+

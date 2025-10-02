@@ -11,6 +11,7 @@ from datasets import load_dataset
 from tokenizers import Tokenizer, models, trainers, pre_tokenizers, decoders
 from tqdm import tqdm
 import structlog
+from torch.utils.tensorboard import SummaryWriter
 
 @dataclass
 class Hyperparameters:
@@ -110,6 +111,20 @@ def train_tokenizer(titles: list[str], vocab_size: int, unk_token: str = "<unk>"
     )
     tokenizer.train_from_iterator(titles, trainer)
     return tokenizer
+
+# --- Rules guard: verify constraints (DO NOT REMOVE) ---
+import json, pathlib, subprocess, sys
+def _guard_rules(train_cfg):
+    payload = json.dumps({"train_cfg": {
+        "epochs": train_cfg["epochs"],
+        "seed": train_cfg["seed"],
+        "val_fraction": train_cfg["val_fraction"],
+    }})
+    rules_py = str(pathlib.Path("rules/check_rules.py"))
+    p = subprocess.run([sys.executable, rules_py, "--payload", payload])
+    if p.returncode != 0: sys.exit(p.returncode)
+_guard_rules(train_cfg)
+# --- end guard ---
 
 class BPETokenizer:
     def __init__(self, tokenizer: Tokenizer):
@@ -262,6 +277,16 @@ def main():
     model_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.log("model_info", parameters_count=model_params)
     
+    # set up SummaryWriter earlier: writer = SummaryWriter(log_dir=run_dir)
+    run_dir = Path("./logs")
+    run_dir.mkdir(exist_ok=True)
+    writer = SummaryWriter(log_dir=run_dir)
+    
+    # once at startup
+    param_count = sum(p.numel() for p in model.parameters())
+    writer.add_text("model/param_count", f"{param_count:,}")
+    writer.add_text("run/seed", str(args.seed))
+    
     opt = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max_steps)
 
@@ -292,6 +317,13 @@ def main():
             scheduler.step()
 
             elapsed = time.time() - t0
+            
+            # each train step (example variables)
+            tokens_per_sec = (args.batch_size * args.block_size) / elapsed if elapsed > 0 else 0
+            writer.add_scalar("loss/train", float(loss.item()), step)
+            writer.add_scalar("lr", opt.param_groups[0]["lr"], step)
+            writer.add_scalar("perf/tokens_per_sec", tokens_per_sec, step)
+            
             logger.log("training_step",
                       step=step,
                       max_steps=max_steps,
@@ -301,6 +333,13 @@ def main():
 
             if step == 1 or step % eval_interval == 0 or step == max_steps:
                 val_loss = evaluate()
+                
+                # after each validation
+                import math
+                val_ppl = math.exp(val_loss)
+                writer.add_scalar("loss/val", float(val_loss), step)
+                writer.add_scalar("metrics/perplexity", val_ppl, step)
+                
                 logger.log("validation_step",
                           step=step,
                           max_steps=max_steps,
