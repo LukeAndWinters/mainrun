@@ -40,10 +40,11 @@ tasks:
   snapshot:
     desc: "Export TB scalars to PNG/CSV and append CHANGELOG"
     cmds:
-      - python3 scripts/export_scalars.py --run_dir {{.RUN_DIR}} --out_dir docs/figures
+      - python3 scripts/export_scalars.py --run_dir {{.RUN_DIR}} --out_dir docs/figures{{if .RUN_NAME}} --run_name {{.RUN_NAME}}{{end}}
       - python3 scripts/append_changelog.py --exp_name {{.EXP}} --title "{{.TITLE}}" --change "{{.CHANGE}}" --rationale "{{.WHY}}" --settings "{{.SETTINGS}}" --best_val {{.BEST}}
     vars:
-      RUN_DIR: '{{default "logs/latest" .RUN_DIR}}'
+      RUN_DIR: '{{default "mainrun/logs" .RUN_DIR}}'
+      RUN_NAME: '{{default "" .RUN_NAME}}'
       EXP: '{{default "exp" .EXP}}'
       TITLE: '{{default "iteration" .TITLE}}'
       CHANGE: '{{default "n/a" .CHANGE}}'
