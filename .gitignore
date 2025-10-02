@@ -1,5 +1,18 @@
+# Data directories and files
+data/
 mainrun/data/
+**/data/
+**/datasets/
 
+# Dataset cache files
+*.arrow
+*.lock
+*_builder.lock
+*incomplete_info.lock
+cache-*.arrow
+dataset_info.json
+
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -9,12 +22,24 @@ env/
 venv/
 .env
 
+# Logs
 mainrun*.log
+*.log
+logs/
 
+# Node modules
 node_modules/
 
+# IDEs
 .vscode/
 .idea/
 
+# OS files
 .DS_Store
 Thumbs.db
+
+# Large files that shouldn't be tracked
+*.arrow
+*.parquet
+*.h5
+*.hdf5
