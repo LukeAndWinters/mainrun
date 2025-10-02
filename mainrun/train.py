@@ -11,6 +11,7 @@ from datasets import load_dataset
 from tokenizers import Tokenizer, models, trainers, pre_tokenizers, decoders
 from tqdm import tqdm
 import structlog
+from torch.utils.tensorboard import SummaryWriter
 
 @dataclass
 class Hyperparameters:
@@ -21,8 +22,9 @@ class Hyperparameters:
     n_head: int = 8
     d_model: int = 512
     dropout: float = 0.1
-    lr: float = 6e-3
-    weight_decay: float = 0.0
+    lr: float = 3e-4  # Lower LR for AdamW
+    weight_decay: float = 0.1  # Add weight decay for AdamW
+    warmup_steps: int = 100  # Warmup steps
     evals_per_epoch: int = 3
     
     epochs: int = 7
@@ -30,6 +32,7 @@ class Hyperparameters:
     num_titles: int = 100_000
     val_frac: float = 0.10
     log_file: str = "./logs/mainrun.log"
+    tensorboard_log_dir: str = "./logs/tensorboard"
 
 def configure_logging(log_file: str):
     Path(log_file).parent.mkdir(parents=True, exist_ok=True)
@@ -74,6 +77,14 @@ def configure_logging(log_file: str):
                         tqdm.write(event)
     
     return DualLogger(file_handler)
+
+def get_lr(step: int, warmup_steps: int, max_steps: int, base_lr: float) -> float:
+    """Learning rate with warmup + cosine decay"""
+    if step < warmup_steps:
+        return base_lr * step / warmup_steps
+    else:
+        progress = (step - warmup_steps) / (max_steps - warmup_steps)
+        return base_lr * 0.5 * (1 + math.cos(math.pi * progress))
 
 logger = None
 
@@ -225,6 +236,10 @@ def main():
     global logger
     logger = configure_logging(args.log_file)
     
+    # Setup TensorBoard
+    Path(args.tensorboard_log_dir).mkdir(parents=True, exist_ok=True)
+    writer = SummaryWriter(args.tensorboard_log_dir)
+    
     hyperparams_dict = vars(args)
     logger.log("hyperparameters_configured", **hyperparams_dict)
     
@@ -262,8 +277,8 @@ def main():
     model_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.log("model_info", parameters_count=model_params)
     
-    opt = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max_steps)
+    # AdamW optimizer with better hyperparameters
+    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.95))
 
     def evaluate():
         model.eval()
@@ -288,24 +303,46 @@ def main():
             opt.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            
+            # Get current learning rate
+            current_lr = get_lr(step, args.warmup_steps, max_steps, args.lr)
+            for param_group in opt.param_groups:
+                param_group['lr'] = current_lr
+                
             opt.step()
-            scheduler.step()
 
             elapsed = time.time() - t0
+            
+            # Log to TensorBoard
+            writer.add_scalar('Train/Loss', loss.item(), step)
+            writer.add_scalar('Train/LearningRate', current_lr, step)
+            writer.add_scalar('Train/Perplexity', math.exp(loss.item()), step)
+            
             logger.log("training_step",
                       step=step,
                       max_steps=max_steps,
                       loss=loss.item(),
+                      lr=current_lr,
                       elapsed_time=elapsed,
                       prnt=False)
 
             if step == 1 or step % eval_interval == 0 or step == max_steps:
                 val_loss = evaluate()
+                val_perplexity = math.exp(val_loss)
+                
+                # Log validation metrics to TensorBoard
+                writer.add_scalar('Val/Loss', val_loss, step)
+                writer.add_scalar('Val/Perplexity', val_perplexity, step)
+                
                 logger.log("validation_step",
                           step=step,
                           max_steps=max_steps,
                           loss=val_loss,
+                          perplexity=val_perplexity,
                           elapsed_time=elapsed)
+
+    # Close TensorBoard writer
+    writer.close()
 
 if __name__ == "__main__":
     try:
