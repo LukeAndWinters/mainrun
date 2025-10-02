@@ -26,14 +26,14 @@ tasks:
   tb:
     desc: "Launch TensorBoard on 0.0.0.0:6006 (Docker-friendly)"
     cmds:
-      - python3 -m tensorboard.main --logdir mainrun/runs --port ${PORT} --bind_all
+      - sh -lc 'echo "Open http://localhost:${PORT}"; python3 -m tensorboard.main --logdir mainrun/runs --port ${PORT} --bind_all'
     env:
       PORT: 6006
 
   tb-local:
     desc: "Launch TensorBoard on localhost:6006 (for direct container access)"
     cmds:
-      - python3 -m tensorboard.main --logdir mainrun/runs --host localhost --port ${PORT}
+      - sh -lc 'echo "Open http://localhost:${PORT}"; python3 -m tensorboard.main --logdir mainrun/runs --host localhost --port ${PORT}'
     env:
       PORT: 6006
 
@@ -56,3 +56,10 @@ tasks:
     desc: "Build PDF report from mainrun/report.md"
     cmds:
       - python3 scripts/build_report.py --src mainrun/report.md --out mainrun/report.pdf
+
+  tb-6007:
+    desc: "Launch TensorBoard on 0.0.0.0:6007 (stable port)"
+    cmds:
+      - sh -lc 'echo "Open http://localhost:${PORT}"; python3 -m tensorboard.main --logdir mainrun/runs --port ${PORT} --bind_all'
+    env:
+      PORT: 6007

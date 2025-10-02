@@ -287,7 +287,9 @@ def main():
     
     # set up a per-run directory under mainrun/runs with a stable symlink 'latest'
     # This does not change training logic; only organizes outputs for TB/reporting.
-    runs_root = Path("mainrun/runs")
+    # Resolve repo root so paths are stable regardless of current working directory
+    repo_root = Path(__file__).resolve().parent.parent
+    runs_root = repo_root / "mainrun" / "runs"
     runs_root.mkdir(parents=True, exist_ok=True)
     run_id = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
     run_dir = runs_root / run_id
