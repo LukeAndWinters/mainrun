@@ -1,0 +1,8 @@
+---
+alwaysApply: true
+---
+# Rule: TB Logging + Docs
+# Scope: mainrun/train.py, scripts/**
+- Ensure scalars: loss/train, loss/val, lr, perf/tokens_per_sec, metrics/perplexity.
+- Write SummaryWriter logs to mainrun/runs/<exp>.
+- After training: export PNG/CSV via scripts/export_scalars.py and append docs/CHANGELOG.md.
