@@ -11,10 +11,12 @@ from datasets import load_dataset
 from tokenizers import Tokenizer, models, trainers, pre_tokenizers, decoders
 from tqdm import tqdm
 import structlog
+# OPTIMIZATION: Added TensorBoard for enhanced monitoring and visualization
 from torch.utils.tensorboard import SummaryWriter
 
 @dataclass
 class Hyperparameters:
+    # Model architecture parameters (unchanged from baseline)
     block_size: int = 128
     batch_size: int = 64
     vocab_size: int = 16_000
@@ -22,16 +24,22 @@ class Hyperparameters:
     n_head: int = 8
     d_model: int = 512
     dropout: float = 0.1
-    lr: float = 3e-4  # Lower LR for AdamW
-    weight_decay: float = 0.1  # Add weight decay for AdamW
-    warmup_steps: int = 100  # Warmup steps
+    
+    # OPTIMIZATION: Optimized hyperparameters for AdamW optimizer
+    lr: float = 3e-4  # Reduced from 6e-3: AdamW works better with lower learning rates
+    weight_decay: float = 0.1  # Increased from 0.0: Add regularization to prevent overfitting
+    warmup_steps: int = 100  # New: Warmup steps for learning rate scheduling
+    
     evals_per_epoch: int = 3
     
+    # Fixed parameters (cannot be changed per constraints)
     epochs: int = 7
     seed: int = 1337
     num_titles: int = 100_000
     val_frac: float = 0.10
     log_file: str = "./logs/mainrun.log"
+    
+    # OPTIMIZATION: Added TensorBoard logging directory
     tensorboard_log_dir: str = "./logs/tensorboard"
 
 def configure_logging(log_file: str):
@@ -78,11 +86,25 @@ def configure_logging(log_file: str):
     
     return DualLogger(file_handler)
 
+# OPTIMIZATION: Custom learning rate scheduling function
 def get_lr(step: int, warmup_steps: int, max_steps: int, base_lr: float) -> float:
-    """Learning rate with warmup + cosine decay"""
+    """
+    Learning rate with warmup + cosine decay scheduling.
+    
+    This replaces the simple cosine annealing with a more sophisticated schedule:
+    1. Warmup phase: Linear increase from 0 to base_lr over warmup_steps
+    2. Cosine decay phase: Smooth cosine decay from base_lr to near 0
+    
+    Benefits:
+    - Prevents early training instability from large gradients
+    - Provides smooth convergence in the later stages
+    - Standard practice in modern language models (GPT, BERT, etc.)
+    """
     if step < warmup_steps:
+        # Warmup phase: linear increase from 0 to base_lr
         return base_lr * step / warmup_steps
     else:
+        # Cosine decay phase: smooth decay from base_lr to near 0
         progress = (step - warmup_steps) / (max_steps - warmup_steps)
         return base_lr * 0.5 * (1 + math.cos(math.pi * progress))
 
@@ -236,7 +258,9 @@ def main():
     global logger
     logger = configure_logging(args.log_file)
     
-    # Setup TensorBoard
+    # OPTIMIZATION: Setup TensorBoard for enhanced monitoring
+    # This provides real-time visualization of training metrics, loss curves,
+    # learning rate schedules, and other important training information
     Path(args.tensorboard_log_dir).mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(args.tensorboard_log_dir)
     
@@ -277,7 +301,17 @@ def main():
     model_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.log("model_info", parameters_count=model_params)
     
-    # AdamW optimizer with better hyperparameters
+    # OPTIMIZATION: Replaced SGD with AdamW optimizer
+    # AdamW is superior to SGD for transformer architectures because:
+    # 1. Adaptive learning rates per parameter (better for sparse gradients)
+    # 2. Momentum-based updates that handle complex loss landscapes
+    # 3. Decoupled weight decay for better regularization
+    # 4. Proven performance on language models
+    # 
+    # Hyperparameters optimized for language models:
+    # - lr=3e-4: Lower than SGD (6e-3) as AdamW works better with smaller LRs
+    # - weight_decay=0.1: Added regularization to prevent overfitting
+    # - betas=(0.9, 0.95): Optimized for language models (vs default 0.9, 0.999)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.95))
 
     def evaluate():
@@ -304,7 +338,11 @@ def main():
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             
-            # Get current learning rate
+            # OPTIMIZATION: Custom learning rate scheduling (replaces simple cosine annealing)
+            # This implements warmup + cosine decay scheduling:
+            # 1. Warmup phase (steps 0-100): Linear increase from 0 to base_lr
+            # 2. Cosine decay phase (steps 100-938): Smooth decay from base_lr to near 0
+            # This prevents early training instability and provides better convergence
             current_lr = get_lr(step, args.warmup_steps, max_steps, args.lr)
             for param_group in opt.param_groups:
                 param_group['lr'] = current_lr
@@ -313,7 +351,11 @@ def main():
 
             elapsed = time.time() - t0
             
-            # Log to TensorBoard
+            # OPTIMIZATION: Enhanced TensorBoard logging for monitoring
+            # This provides real-time visualization of:
+            # - Training loss curves
+            # - Learning rate schedule
+            # - Perplexity metrics (more interpretable than raw loss)
             writer.add_scalar('Train/Loss', loss.item(), step)
             writer.add_scalar('Train/LearningRate', current_lr, step)
             writer.add_scalar('Train/Perplexity', math.exp(loss.item()), step)
@@ -330,7 +372,11 @@ def main():
                 val_loss = evaluate()
                 val_perplexity = math.exp(val_loss)
                 
-                # Log validation metrics to TensorBoard
+                # OPTIMIZATION: Enhanced validation logging with TensorBoard
+                # This tracks validation metrics for monitoring overfitting and convergence:
+                # - Validation loss curves
+                # - Validation perplexity (more interpretable than raw loss)
+                # These metrics help identify when the model is learning vs memorizing
                 writer.add_scalar('Val/Loss', val_loss, step)
                 writer.add_scalar('Val/Perplexity', val_perplexity, step)
                 
@@ -341,7 +387,8 @@ def main():
                           perplexity=val_perplexity,
                           elapsed_time=elapsed)
 
-    # Close TensorBoard writer
+    # OPTIMIZATION: Clean up TensorBoard writer
+    # This ensures all logged data is properly flushed to disk
     writer.close()
 
 if __name__ == "__main__":
