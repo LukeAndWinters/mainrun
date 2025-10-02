@@ -32,3 +32,31 @@ Figures:
 ![Tokens/sec](../docs/figures/baseline_20251002_perf_tokens_per_sec.png)
 ![Perplexity](../docs/figures/baseline_20251002_metrics_perplexity.png)
 
+
+## adamw_warmup_01 — AdamW + warmup-cosine LR floor
+- Change: Switch optimizer to AdamW; add warmup then cosine (10% floor)
+- Rationale: Stabilize early steps and sustain learning late within 7 epochs
+- Settings: `betas=(0.9,0.95), wd=as_before, warmup≈10%/≤1000, lr_floor=0.1lr`
+- Best val loss: **1.4452**
+
+Figures:
+![Validation Loss](../docs/figures/adamw_warmup_01_loss_val.png)
+![Training Loss](../docs/figures/adamw_warmup_01_loss_train.png)
+![Learning Rate](../docs/figures/adamw_warmup_01_lr.png)
+![Tokens/sec](../docs/figures/adamw_warmup_01_perf_tokens_per_sec.png)
+![Perplexity](../docs/figures/adamw_warmup_01_metrics_perplexity.png)
+
+
+## adamw_warmup_01 — AdamW + warmup-cosine LR floor
+- Change: Switch optimizer to AdamW; add warmup then cosine (10% floor)
+- Rationale: Stabilize early steps and sustain learning late within 7 epochs
+- Settings: `betas=(0.9,0.95), wd=as_before, warmup≈10%/≤1000, lr_floor=0.1*lr`
+- Best val loss: **1.4452**
+
+Figures:
+![Validation Loss](../docs/figures/adamw_warmup_01_loss_val.png)
+![Training Loss](../docs/figures/adamw_warmup_01_loss_train.png)
+![Learning Rate](../docs/figures/adamw_warmup_01_lr.png)
+![Tokens/sec](../docs/figures/adamw_warmup_01_perf_tokens_per_sec.png)
+![Perplexity](../docs/figures/adamw_warmup_01_metrics_perplexity.png)
+
