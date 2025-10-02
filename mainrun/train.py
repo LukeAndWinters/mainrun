@@ -123,7 +123,6 @@ def _guard_rules(train_cfg):
     rules_py = str(pathlib.Path("rules/check_rules.py"))
     p = subprocess.run([sys.executable, rules_py, "--payload", payload])
     if p.returncode != 0: sys.exit(p.returncode)
-_guard_rules(train_cfg)
 # --- end guard ---
 
 class BPETokenizer:
@@ -236,6 +235,15 @@ def main():
     args = Hyperparameters()
     torch.manual_seed(args.seed)
     random.seed(args.seed)
+    
+    # --- Rules guard: verify constraints (DO NOT REMOVE) ---
+    train_cfg = {
+        "epochs": args.epochs,
+        "seed": args.seed,
+        "val_fraction": args.val_frac,
+    }
+    _guard_rules(train_cfg)
+    # --- end guard ---
     
     global logger
     logger = configure_logging(args.log_file)
