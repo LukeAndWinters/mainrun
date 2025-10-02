@@ -28,7 +28,7 @@ tasks:
     cmds:
       - sh -lc 'echo "Open http://localhost:${PORT}"; python3 -m tensorboard.main --logdir mainrun/runs --port ${PORT} --bind_all'
     env:
-      PORT: 6006
+      PORT: 6007
 
   tb-local:
     desc: "Launch TensorBoard on localhost:6006 (for direct container access)"
