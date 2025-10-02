@@ -311,8 +311,37 @@ def main():
     writer.add_text("model/param_count", f"{param_count:,}")
     writer.add_text("run/seed", str(args.seed))
     
-    opt = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max_steps)
+    # Optimizer: switch to AdamW with decoupled weight decay and explicit no-decay groups
+    # WHAT: AdamW typically stabilizes transformer training versus SGD; we also
+    #       exclude bias/LayerNorm/Embedding from weight decay as common practice.
+    # WHY: Expected faster convergence and better generalization with the same 7 epochs.
+    decay_params, no_decay_params = [], []
+    for name, p in model.named_parameters():
+        if not p.requires_grad:
+            continue
+        if name.endswith("bias") or "ln" in name.lower() or "layernorm" in name.lower() or "emb" in name.lower():
+            no_decay_params.append(p)
+        else:
+            decay_params.append(p)
+    opt = torch.optim.AdamW(
+        [
+            {"params": decay_params, "weight_decay": args.weight_decay},
+            {"params": no_decay_params, "weight_decay": 0.0},
+        ],
+        lr=args.lr,
+        betas=(0.9, 0.95)
+    )
+
+    # LR schedule: linear warmup then cosine decay to an LR floor
+    # WHY: Warmup avoids early instability; LR floor prevents the LR from collapsing to zero.
+    warmup_steps = max(1, min(1000, int(0.1 * max_steps)))
+    lr_min = args.lr * 0.10  # 10% floor
+    def _lr_schedule(step_idx: int) -> float:
+        if step_idx <= warmup_steps:
+            return args.lr * (step_idx / warmup_steps)
+        progress = (step_idx - warmup_steps) / max(1, (max_steps - warmup_steps))
+        cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
+        return lr_min + (args.lr - lr_min) * cosine
 
     # Persist immutable run metadata for reporting
     try:
@@ -361,7 +390,9 @@ def main():
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
-            scheduler.step()
+            # Manual LR schedule application (logs reflect current LR)
+            for pg in opt.param_groups:
+                pg["lr"] = _lr_schedule(step)
 
             elapsed = time.time() - t0
             
