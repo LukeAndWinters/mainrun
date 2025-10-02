@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Build a simple PDF report from mainrun/report.md and available figures.
+Build a simple PDF report by concatenating markdown sections for each experiment.
+This script appends sequentially; it will not overwrite existing history.
 Pure-Python implementation using reportlab to stay Docker-friendly.
 
 Usage:
