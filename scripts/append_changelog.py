@@ -26,7 +26,7 @@ def main():
     entry=TEMPLATE.format(
         exp_name=args.exp_name, title=args.title, change=args.change,
         rationale=args.rationale, settings=args.settings, best_val=args.best_val,
-        file_prefix=args.exp_name
+        file_prefix=args.exp_name, commit=git_commit_hash()
     )
     with md.open("a") as f: f.write(entry+"\n")
 if __name__=="__main__": main()

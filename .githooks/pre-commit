@@ -5,4 +5,4 @@ if git diff --staged -U0 -- mainrun/train.py | grep -E '\+.*epochs\s*=\s*[^7]'; 
   echo "[HOOK] epochs != 7 detected in staged changes"; exit 1
 fi
 # Run Python guard with placeholders (full check runs at train-time)
-python rules/check_rules.py --precommit
+python3 mainrun/rules/check_rules.py --precommit

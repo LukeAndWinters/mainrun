@@ -7,6 +7,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+from torch.cuda.amp import autocast, GradScaler
 from datasets import load_dataset
 from tokenizers import Tokenizer, models, trainers, pre_tokenizers, decoders
 from tqdm import tqdm
@@ -120,7 +121,7 @@ def _guard_rules(train_cfg):
         "seed": train_cfg["seed"],
         "val_fraction": train_cfg["val_fraction"],
     }})
-    rules_py = str(pathlib.Path("rules/check_rules.py"))
+    rules_py = str(pathlib.Path("mainrun/rules/check_rules.py"))
     p = subprocess.run([sys.executable, rules_py, "--payload", payload])
     if p.returncode != 0: sys.exit(p.returncode)
 # --- end guard ---
@@ -331,6 +332,10 @@ def main():
         lr=args.lr,
         betas=(0.9, 0.95)
     )
+    
+    # AMP: Initialize GradScaler for automatic mixed precision
+    # WHY: Enables 1.5-2x speedup with minimal memory overhead
+    scaler = GradScaler()
 
     # LR schedule: linear warmup then cosine decay to an LR floor
     # WHY: Warmup avoids early instability; LR floor prevents the LR from collapsing to zero.
@@ -385,11 +390,20 @@ def main():
         for _ in tqdm(range(1, batches + 1), desc=f"Epoch {epoch}/{args.epochs}"):
             step += 1
             xb, yb, ptr = get_batch(train_ids, ptr, args.block_size, args.batch_size, device)
-            _, loss = model(xb, yb)
+            
+            # AMP: Wrap forward pass with autocast for mixed precision
+            # WHY: Enables 16-bit operations where safe, 32-bit where needed
+            with autocast():
+                _, loss = model(xb, yb)
             opt.zero_grad(set_to_none=True)
-            loss.backward()
+            
+            # AMP: Use scaler for backward pass and optimization
+            # WHY: Handles gradient scaling for numerical stability in fp16
+            scaler.scale(loss).backward()
+            scaler.unscale_(opt)
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            opt.step()
+            scaler.step(opt)
+            scaler.update()
             # Manual LR schedule application (logs reflect current LR)
             for pg in opt.param_groups:
                 pg["lr"] = _lr_schedule(step)

@@ -15,3 +15,14 @@
   ![lr](../figures/adamw_warmup_01_lr.png)  
   ![tokens/sec](../figures/adamw_warmup_01_perf_tokens_per_sec.png)  
   ![perplexity](../figures/adamw_warmup_01_metrics_perplexity.png)
+
+## amp_02 — AMP (Automatic Mixed Precision)
+- **Commit:** `c1272df`
+- **Change:** Add autocast and GradScaler for mixed precision training
+- **Rationale:** Enable 1.5-2x speedup with minimal memory overhead
+- **Key settings:** `autocast(), GradScaler(), betas=(0.9,0.95)`
+- **Result:** best val loss = **1.4470**
+- **Figures:**  
+  ![val loss](figures/amp_02_loss_val.png)  
+  ![train loss](figures/amp_02_loss_train.png)
+
