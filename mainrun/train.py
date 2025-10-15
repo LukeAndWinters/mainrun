@@ -27,6 +27,12 @@ class Hyperparameters:
     weight_decay: float = 0.0
     evals_per_epoch: int = 3
     
+    # Gradient Accumulation: accumulate gradients over multiple micro-batches
+    # WHAT: Process multiple small batches before updating weights
+    # WHY: Simulates larger effective batch size for better gradient estimates
+    # IMPACT: Better gradient estimates, improved convergence, memory efficient
+    grad_accum_steps: int = 4  # Accumulate over 4 micro-batches
+    
     epochs: int = 7
     seed: int = 1337
     num_titles: int = 100_000
@@ -264,9 +270,14 @@ def main():
     train_ids = torch.tensor(tok.encode(train_text), dtype=torch.long)
     val_ids = torch.tensor(tok.encode(val_text), dtype=torch.long)
     
-    batches = len(train_ids) // (args.block_size * args.batch_size)
-    max_steps = args.epochs * batches
-    eval_interval = batches // args.evals_per_epoch
+    # Calculate batches and steps with gradient accumulation
+    # WHAT: Adjust batch calculation for gradient accumulation
+    # WHY: Maintain same effective batch size while using accumulation
+    # IMPACT: More micro-batches per epoch, fewer gradient updates per epoch
+    micro_batch_size = args.batch_size // args.grad_accum_steps  # 64 // 4 = 16
+    batches = len(train_ids) // (args.block_size * micro_batch_size)  # More batches per epoch
+    max_steps = args.epochs * batches // args.grad_accum_steps  # Steps = gradient updates (fewer)
+    eval_interval = (batches // args.evals_per_epoch) // args.grad_accum_steps  # Adjust eval frequency
     logger.log("dataset_info",
                titles_count=len(train_titles),
                epochs=args.epochs,
@@ -333,9 +344,12 @@ def main():
         betas=(0.9, 0.95)
     )
     
-    # AMP: Initialize GradScaler for automatic mixed precision
-    # WHY: Enables 1.5-2x speedup with minimal memory overhead
-    scaler = GradScaler()
+    # AMP: Configure mixed precision
+    # WHAT: Prefer bf16 (no GradScaler needed) when supported; else fp16 + GradScaler
+    # WHY: bf16 is numerically more stable and avoids scaler-related instabilities
+    use_bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+    amp_dtype = torch.bfloat16 if use_bf16 else torch.float16
+    scaler = None if use_bf16 else GradScaler()
 
     # LR schedule: linear warmup then cosine decay to an LR floor
     # WHY: Warmup avoids early instability; LR floor prevents the LR from collapsing to zero.
@@ -358,6 +372,9 @@ def main():
             "val_fraction": args.val_frac,
             "block_size": args.block_size,
             "batch_size": args.batch_size,
+            "grad_accum_steps": args.grad_accum_steps,
+            "effective_batch_size": args.batch_size,  # Same due to accumulation
+            "micro_batch_size": micro_batch_size,
             "vocab_size": tok.vocab_size,
             "n_layer": args.n_layer,
             "n_head": args.n_head,
@@ -386,40 +403,88 @@ def main():
     step = 0
     t0 = time.time()
     best_val = float("inf")
+    
+    # Gradient Accumulation: Process multiple micro-batches before updating
+    # WHAT: Accumulate gradients over grad_accum_steps micro-batches
+    # WHY: Simulates larger effective batch size for better gradient estimates
+    # IMPACT: Better gradient estimates, improved convergence, memory efficient
     for epoch in range(1, args.epochs + 1):
-        for _ in tqdm(range(1, batches + 1), desc=f"Epoch {epoch}/{args.epochs}"):
-            step += 1
-            xb, yb, ptr = get_batch(train_ids, ptr, args.block_size, args.batch_size, device)
-            
-            # AMP: Wrap forward pass with autocast for mixed precision
-            # WHY: Enables 16-bit operations where safe, 32-bit where needed
-            with autocast():
-                _, loss = model(xb, yb)
+        for batch_idx in tqdm(range(1, batches + 1), desc=f"Epoch {epoch}/{args.epochs}"):
+            # Process micro-batches for gradient accumulation
+            # WHAT: Process 4 micro-batches of size 16 before updating weights
+            # WHY: Simulates batch size of 64 with memory efficiency
+            accumulated_loss = 0.0
+            # Always clear grads at the start of an accumulation window to avoid leakage
             opt.zero_grad(set_to_none=True)
+            for micro_batch in range(args.grad_accum_steps):
+                xb, yb, ptr = get_batch(train_ids, ptr, args.block_size, micro_batch_size, device)
+                
+                # AMP: Wrap forward pass with autocast for mixed precision
+                # WHY: Enables 16-bit operations where safe, 32-bit where needed
+                with autocast(dtype=amp_dtype):
+                    _, loss = model(xb, yb)
+                
+                # Scale loss by accumulation steps to maintain correct gradient magnitude
+                # WHAT: Divide loss by grad_accum_steps to prevent gradient explosion
+                # WHY: Each micro-batch contributes 1/4 of the total gradient
+                scaled_loss = loss / args.grad_accum_steps
+                accumulated_loss += loss.item()
+                
+                # Backward pass with or without GradScaler depending on precision mode
+                if scaler is None:  # bf16 path (no scaler)
+                    scaled_loss.backward()
+                else:  # fp16 path with scaler
+                    scaler.scale(scaled_loss).backward()
             
-            # AMP: Use scaler for backward pass and optimization
-            # WHY: Handles gradient scaling for numerical stability in fp16
-            scaler.scale(loss).backward()
-            scaler.unscale_(opt)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            scaler.step(opt)
-            scaler.update()
+            # Update weights after accumulating gradients from all micro-batches
+            # WHAT: Apply accumulated gradients to model parameters
+            # WHY: Single update per effective batch instead of per micro-batch
+            if scaler is None:
+                # bf16 path: clip and step directly
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                # Skip update if gradients are non-finite
+                total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                if not torch.isfinite(total_norm):
+                    opt.zero_grad(set_to_none=True)
+                else:
+                    opt.step()
+            else:
+                # fp16 path: unscale, clip, sanity-check, then step via scaler
+                scaler.unscale_(opt)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                # If any grad is non-finite after unscale, skip this step
+                found_inf = False
+                for p in model.parameters():
+                    if p.grad is not None and not torch.isfinite(p.grad).all():
+                        found_inf = True
+                        break
+                if found_inf:
+                    scaler.update()  # still update internal scale to recover
+                    opt.zero_grad(set_to_none=True)
+                else:
+                    scaler.step(opt)
+                    scaler.update()
+            
+            # Only increment step counter after full gradient update
+            step += 1
+            
             # Manual LR schedule application (logs reflect current LR)
             for pg in opt.param_groups:
                 pg["lr"] = _lr_schedule(step)
 
             elapsed = time.time() - t0
             
-            # each train step (example variables)
-            tokens_per_sec = (args.batch_size * args.block_size) / elapsed if elapsed > 0 else 0
-            writer.add_scalar("loss/train", float(loss.item()), step)
+            # Calculate tokens per second based on effective batch size
+            effective_batch_size = args.batch_size  # Same as before due to accumulation
+            tokens_per_sec = (effective_batch_size * args.block_size) / elapsed if elapsed > 0 else 0
+            writer.add_scalar("loss/train", float(accumulated_loss / args.grad_accum_steps), step)
             writer.add_scalar("lr", opt.param_groups[0]["lr"], step)
             writer.add_scalar("perf/tokens_per_sec", tokens_per_sec, step)
             
             logger.log("training_step",
                       step=step,
                       max_steps=max_steps,
-                      loss=loss.item(),
+                      loss=accumulated_loss / args.grad_accum_steps,
                       elapsed_time=elapsed,
                       prnt=False)
 
