@@ -1,4 +1,5 @@
 mainrun/data/
+data/
 
 __pycache__/
 *.py[cod]
@@ -17,6 +18,13 @@ node_modules/
 .idea/
 
 .DS_Store
-Thumbs.dbmainrun/runs/
+Thumbs.db
+
+# Training/run artifacts
+mainrun/runs/
+mainrun/logs/
+logs/
+
+# Exported scalar tables (kept in runs; not in repo)
 docs/figures/*.csv
 
