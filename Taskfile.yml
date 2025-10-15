@@ -42,7 +42,6 @@ tasks:
     cmds:
       - python3 scripts/export_scalars.py --run_dir {{.RUN_DIR}} --out_dir docs/figures{{if .RUN_NAME}} --run_name {{.RUN_NAME}}{{end}}
       - python3 scripts/append_changelog.py --exp_name {{.EXP}} --title "{{.TITLE}}" --change "{{.CHANGE}}" --rationale "{{.WHY}}" --settings "{{.SETTINGS}}" --best_val {{.BEST}}
-      - python3 scripts/append_report.py --exp_name {{.EXP}} --title "{{.TITLE}}" --change "{{.CHANGE}}" --rationale "{{.WHY}}" --settings "{{.SETTINGS}}" --best_val {{.BEST}}
     vars:
       RUN_DIR: '{{default "mainrun/runs/latest" .RUN_DIR}}'
       RUN_NAME: '{{default "" .RUN_NAME}}'
@@ -56,7 +55,8 @@ tasks:
   report:
     desc: "Build PDF report from mainrun/report.md"
     cmds:
-      - python3 scripts/build_report.py --src mainrun/report.md --out mainrun/report.pdf
+      - python3 scripts/build_report.py
+
 
   tb-6007:
     desc: "Launch TensorBoard on 0.0.0.0:6007 (stable port)"

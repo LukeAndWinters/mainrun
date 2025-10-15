@@ -1,3 +1,11 @@
 ---
-alwaysApply: true
+alwaysApply: false
 ---
+# Rule: Training Change Protocol
+# Scope: mainrun/**/*.py, Taskfile.yml, docs/**
+For each change:
+1) Suggest a branch name `exps/<NN>-<short>`.
+2) Apply exactly one change (smallest diff).
+3) Provide `task train` as the run command.
+4) Provide a `task snapshot ...` command filling placeholders.
+5) Provide a ready-to-paste CHANGELOG block + one Conventional Commit message.

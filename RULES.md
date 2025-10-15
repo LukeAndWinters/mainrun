@@ -1,5 +1,8 @@
-# MainRun Guardrails
-**Do NOT change:** epochs (7), random seed, dataset/split, or `evaluate()` (definition or call sites).
-**Allowed:** tokenizer, model internals, optimizer/schedule, training loop structure around (but not inside) `evaluate()`, logging, configs, AMP, compile, packing.
+# MainRun Local Rules
+Do NOT change: epochs=7, seed=<baseline>, dataset, val_fraction=<baseline>, or `evaluate()`.
+Do NOT use: pretrained weights or data augmentation.
+Allowed: model arch, tokenization, optimizer, scheduler, training loop (except `evaluate()`).
 
-**House style:** small PRs; every change has PLAN → RISKS → DIFF PLAN → TESTS. If a request risks touching forbidden items, STOP and propose an alternative.
+Local guardrails:
+- Python guard verifies seed/epochs/val_fraction and `evaluate.py` SHA256.
+- Git pre-commit hook blocks violating commits.

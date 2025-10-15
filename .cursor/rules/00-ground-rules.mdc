@@ -1,3 +1,9 @@
 ---
 alwaysApply: true
 ---
+# Rule: MainRun Ground Rules (ALWAYS ON)
+# Scope: **/*.py, **/*.md, Taskfile.yml
+- Never propose changing epochs (must remain 7), seed, dataset, val fraction, or `evaluate()`.
+- Never propose using pretrained weights or data augmentation.
+- For every code edit, add: professional inline comments explaining *what/why*, and a ready-to-append CHANGELOG entry.
+- Keep `evaluate()` untouched; respect local Python guard `_guard_rules(...)` in train.py.
