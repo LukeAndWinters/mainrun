@@ -6,3 +6,40 @@ if git diff --staged -U0 -- mainrun/train.py | grep -E '\+.*epochs\s*=\s*[^7]'; 
 fi
 # Run Python guard with placeholders (full check runs at train-time)
 python3 mainrun/rules/check_rules.py --precommit
+
+# Block large files and heavy patterns from being committed
+# WHAT: Prevent >10MB files and known heavy artifacts from entering history
+# WHY: Avoid push failures and bloated repository size
+max_size_bytes=$((10 * 1024 * 1024))
+blocked_globs=(
+  "data/*"
+  "*.arrow"
+  "mainrun/runs/*"
+  "mainrun/logs/*"
+  "docs/figures/*/*.csv"
+  "**/events.out.tfevents.*"
+)
+
+fail=false
+while IFS= read -r path; do
+  # size check
+  if [ -f "$path" ]; then
+    sz=$(wc -c < "$path" || echo 0)
+    if [ "$sz" -gt "$max_size_bytes" ]; then
+      echo "[HOOK] Blocked large file (>10MB): $path ($sz bytes)" >&2
+      fail=true
+    fi
+  fi
+  # pattern check
+  for pat in "${blocked_globs[@]}"; do
+    if [[ "$path" == $pat ]]; then
+      echo "[HOOK] Blocked heavy artifact by pattern: $path (matches $pat)" >&2
+      fail=true
+    fi
+  done
+done < <(git diff --name-only --cached)
+
+if [ "$fail" = true ]; then
+  echo "[HOOK] Commit aborted. Remove large/heavy artifacts or add to .gitignore." >&2
+  exit 1
+fi
