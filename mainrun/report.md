@@ -30,14 +30,14 @@
 
 #### Validation Loss Comparison
 **Before (Baseline - SGD)**:
-![Baseline Validation Loss](../docs/figures/baseline_20251002_083200/20251002_loss_val.png)
+![Baseline Validation Loss](../docs/figures/20251002_baseline_083200/20251002_loss_val.png)
 - **Final Loss**: 1.7533
 - **Pattern**: Steady decrease with periodic validation spikes
 - **Convergence Rate**: Gradual, reaching ~1.75 by epoch 7
 - **Stability**: Moderate oscillations (σ ≈ 0.05)
 
 **After (AdamW + Warmup-Cosine)**:
-![AdamW Validation Loss](../docs/figures/adamw_warmup_01/20251002_loss_val.png)
+![AdamW Validation Loss](../docs/figures/20251002_adamw_warmup_01/20251002_loss_val.png)
 - **Final Loss**: 1.4452
 - **Pattern**: Smoother convergence with reduced oscillations
 - **Convergence Rate**: Faster initial drop, sustained improvement
