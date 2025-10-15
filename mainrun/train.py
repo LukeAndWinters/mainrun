@@ -353,7 +353,11 @@ def main():
 
     # LR schedule: linear warmup then cosine decay to an LR floor
     # WHY: Warmup avoids early instability; LR floor prevents the LR from collapsing to zero.
-    warmup_steps = max(1, min(1000, int(0.1 * max_steps)))
+    # Stability: increase warmup when using gradient accumulation
+    # WHAT: Use longer warmup (20%) when grad_accum is active to smooth early updates
+    # WHY: Accumulation changes update cadence; a gentler ramp reduces early spikes
+    warmup_ratio = 0.2 if args.grad_accum_steps > 1 else 0.1
+    warmup_steps = max(1, min(1000, int(warmup_ratio * max_steps)))
     lr_min = args.lr * 0.10  # 10% floor
     def _lr_schedule(step_idx: int) -> float:
         if step_idx <= warmup_steps:
@@ -408,6 +412,15 @@ def main():
     # WHAT: Accumulate gradients over grad_accum_steps micro-batches
     # WHY: Simulates larger effective batch size for better gradient estimates
     # IMPACT: Better gradient estimates, improved convergence, memory efficient
+    # EMA for evaluation-only: maintain shadow weights for smoother validation curves
+    # WHAT: Track EMA of parameters; swap to EMA weights only during evaluation
+    # WHY: Produces smoother, more reliable val metrics without changing training dynamics
+    ema_decay = 0.999
+    ema_state = [{"name": n, "data": p.data.detach().clone()} for n, p in model.named_parameters() if p.requires_grad]
+
+    skipped_update_count = 0
+    effective_updates = 0
+
     for epoch in range(1, args.epochs + 1):
         for batch_idx in tqdm(range(1, batches + 1), desc=f"Epoch {epoch}/{args.epochs}"):
             # Process micro-batches for gradient accumulation
@@ -441,17 +454,24 @@ def main():
             # WHY: Single update per effective batch instead of per micro-batch
             if scaler is None:
                 # bf16 path: clip and step directly
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
                 # Skip update if gradients are non-finite
-                total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
                 if not torch.isfinite(total_norm):
                     opt.zero_grad(set_to_none=True)
+                    skipped_update_count += 1
                 else:
                     opt.step()
+                    effective_updates += 1
+                    # Update EMA state after successful optimizer step
+                    with torch.no_grad():
+                        for (n, p), s in zip(model.named_parameters(), ema_state):
+                            if p.requires_grad:
+                                s["data"].mul_(ema_decay).add_(p.data, alpha=1.0 - ema_decay)
             else:
                 # fp16 path: unscale, clip, sanity-check, then step via scaler
                 scaler.unscale_(opt)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
                 # If any grad is non-finite after unscale, skip this step
                 found_inf = False
                 for p in model.parameters():
@@ -461,9 +481,16 @@ def main():
                 if found_inf:
                     scaler.update()  # still update internal scale to recover
                     opt.zero_grad(set_to_none=True)
+                    skipped_update_count += 1
                 else:
                     scaler.step(opt)
                     scaler.update()
+                    effective_updates += 1
+                    # Update EMA state after successful optimizer step
+                    with torch.no_grad():
+                        for (n, p), s in zip(model.named_parameters(), ema_state):
+                            if p.requires_grad:
+                                s["data"].mul_(ema_decay).add_(p.data, alpha=1.0 - ema_decay)
             
             # Only increment step counter after full gradient update
             step += 1
@@ -480,6 +507,9 @@ def main():
             writer.add_scalar("loss/train", float(accumulated_loss / args.grad_accum_steps), step)
             writer.add_scalar("lr", opt.param_groups[0]["lr"], step)
             writer.add_scalar("perf/tokens_per_sec", tokens_per_sec, step)
+            # Stability counters (cumulative)
+            writer.add_scalar("train/skipped_update_cum", skipped_update_count, step)
+            writer.add_scalar("train/effective_updates_cum", effective_updates, step)
             
             logger.log("training_step",
                       step=step,
@@ -489,7 +519,22 @@ def main():
                       prnt=False)
 
             if step == 1 or step % eval_interval == 0 or step == max_steps:
+                # Swap to EMA weights for evaluation, then swap back
+                # Save current params
+                with torch.no_grad():
+                    current_weights = [p.data.detach().clone() for p in model.parameters() if p.requires_grad]
+                    # Load EMA
+                    i = 0
+                    for p in model.parameters():
+                        if p.requires_grad:
+                            p.data.copy_(ema_state[i]["data"]) ; i += 1
                 val_loss = evaluate()
+                # Restore current params
+                with torch.no_grad():
+                    i = 0
+                    for p in model.parameters():
+                        if p.requires_grad:
+                            p.data.copy_(current_weights[i]) ; i += 1
                 if val_loss < best_val:
                     best_val = val_loss
                 
