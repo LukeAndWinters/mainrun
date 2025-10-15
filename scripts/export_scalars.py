@@ -35,18 +35,25 @@ def main():
             # Fallback to current timestamp
             run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     
+    # Get current date for filename prefix
+    current_date = datetime.now().strftime("%Y%m%d")
+    
     # Create subdirectory for this experiment
     exp_dir = out / run_id
     exp_dir.mkdir(parents=True, exist_ok=True)
     
     ea = EventAccumulator(str(run)); ea.Reload()
     for tag in ["loss/train","loss/val","lr","perf/tokens_per_sec","metrics/perplexity"]:
-        plot_series(tag, ea, exp_dir / f"{tag.replace('/','_')}.png")
+        # Add date prefix to filenames
+        filename = f"{current_date}_{tag.replace('/','_')}.png"
+        plot_series(tag, ea, exp_dir / filename)
     rows=[]
     for tag in ea.Tags()["scalars"]:
         for s in ea.Scalars(tag):
             rows.append({"tag": tag, "step": s.step, "value": s.value})
-    if rows: pd.DataFrame(rows).to_csv(exp_dir / "scalars.csv", index=False)
+    if rows: 
+        csv_filename = f"{current_date}_scalars.csv"
+        pd.DataFrame(rows).to_csv(exp_dir / csv_filename, index=False)
     print(f"Exported snapshots to: {exp_dir}")
 
 if __name__ == "__main__": main()

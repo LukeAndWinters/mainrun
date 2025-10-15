@@ -30,14 +30,14 @@
 
 #### Validation Loss Comparison
 **Before (Baseline - SGD)**:
-![Baseline Validation Loss](../docs/figures/baseline_20251002/083200/loss_val.png)
+![Baseline Validation Loss](../docs/figures/baseline_20251002_083200/20251002_loss_val.png)
 - **Final Loss**: 1.7533
 - **Pattern**: Steady decrease with periodic validation spikes
 - **Convergence Rate**: Gradual, reaching ~1.75 by epoch 7
 - **Stability**: Moderate oscillations (σ ≈ 0.05)
 
 **After (AdamW + Warmup-Cosine)**:
-![AdamW Validation Loss](../docs/figures/adamw_warmup_01/loss_val.png)
+![AdamW Validation Loss](../docs/figures/adamw_warmup_01/20251002_loss_val.png)
 - **Final Loss**: 1.4452
 - **Pattern**: Smoother convergence with reduced oscillations
 - **Convergence Rate**: Faster initial drop, sustained improvement
@@ -45,36 +45,36 @@
 
 #### Learning Rate Schedule Comparison
 **Before (Fixed LR)**:
-![Baseline LR](../docs/figures/baseline_20251002/083200/lr.png)
+![Baseline LR](../docs/figures/20251002_083200_lr.png)
 - **Schedule**: Constant 6e-3 throughout training
 - **Effect**: No adaptation to training progress
 
 **After (Warmup-Cosine)**:
-![AdamW LR](../docs/figures/adamw_warmup_01/lr.png)
+![AdamW LR](../docs/figures/adamw_warmup_01_lr.png)
 - **Schedule**: Linear warmup → cosine decay with floor
 - **Effect**: Better early stability, sustained learning in later epochs
 - **LR Range**: 0 → 6e-3 → 0.6e-3 (10% floor)
 
 #### Training Loss Comparison
 **Before (SGD)**:
-![Baseline Train Loss](../docs/figures/baseline_20251002/083200/loss_train.png)
+![Baseline Train Loss](../docs/figures/20251002_083200_loss_train.png)
 - **Final Loss**: ~1.2
 - **Pattern**: Steady decrease with some noise
 
 **After (AdamW)**:
-![AdamW Train Loss](../docs/figures/adamw_warmup_01/loss_train.png)
+![AdamW Train Loss](../docs/figures/adamw_warmup_01_loss_train.png)
 - **Final Loss**: ~1.0
 - **Pattern**: Smoother decrease, better final convergence
 
 #### Performance Metrics
 **Throughput Comparison**:
-![Baseline Tokens/sec](../docs/figures/baseline_20251002/083200/perf_tokens_per_sec.png) → ![AdamW Tokens/sec](../docs/figures/adamw_warmup_01/perf_tokens_per_sec.png)
+![Baseline Tokens/sec](../docs/figures/20251002_083200_perf_tokens_per_sec.png) → ![AdamW Tokens/sec](../docs/figures/adamw_warmup_01_perf_tokens_per_sec.png)
 - **Baseline**: ~2,500 tokens/sec
 - **AdamW**: ~2,500 tokens/sec (maintained)
 - **Impact**: No performance regression
 
 **Perplexity Comparison**:
-![Baseline Perplexity](../docs/figures/baseline_20251002/083200/metrics_perplexity.png) → ![AdamW Perplexity](../docs/figures/adamw_warmup_01/metrics_perplexity.png)
+![Baseline Perplexity](../docs/figures/20251002_083200_metrics_perplexity.png) → ![AdamW Perplexity](../docs/figures/adamw_warmup_01_metrics_perplexity.png)
 - **Baseline Final**: ~5.8
 - **AdamW Final**: ~4.2
 - **Improvement**: 27.6% reduction in perplexity
