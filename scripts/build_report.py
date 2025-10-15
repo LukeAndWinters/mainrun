@@ -164,6 +164,17 @@ def process_markdown_content(md_content: str) -> list:
                     pathlib.Path(f"../{img_path}")
                 ]
                 
+                # Also try to find in subdirectories (new structure)
+                if not full_img_path:
+                    # Look for the file in any subdirectory of docs/figures
+                    figures_dir = pathlib.Path("docs/figures")
+                    if figures_dir.exists():
+                        for subdir in figures_dir.iterdir():
+                            if subdir.is_dir():
+                                test_file = subdir / pathlib.Path(img_path).name
+                                if test_file.exists():
+                                    possible_paths.append(test_file)
+                
                 for test_path in possible_paths:
                     if test_path.exists():
                         full_img_path = str(test_path)
