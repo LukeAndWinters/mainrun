@@ -752,6 +752,49 @@ Before: Cosine-with-floor schedule (or tail-squeeze) without second-moment dampi
 
 Data and logs: see `logs/tail_squeeze_sweep.jsonl` and summary `logs/tail_squeeze_sweep_summary.json`. Figures can be exported via the snapshot task for the latest run directory when needed.
 
+## Experiment 6d: Micro‑tuning Around Best Config
+
+### Purpose
+Validate whether tiny adjustments around the best final configuration can reduce final validation loss further without reintroducing rebound.
+
+### Runs and Outcomes
+- Run A: `eta_min_factor=0.005`, `tail_squeeze_pct=0.12`, `beta2_tail=0.995`, `warmup_pct=0.25`, `accum=2`
+  - Final Val: 1.39297, Best Val: 1.36683, Rebound: 0.02614
+  - Outcome: Regression (longer tail and stronger β2 damping hurt final).
+- Run B: `eta_min_factor=0.01`, `tail_squeeze_pct=0.10`, `beta2_tail=0.985`, `warmup_pct=0.25`, `accum=2`
+  - Final Val: 1.35761, Best Val: 1.35437, Rebound: 0.00324
+  - Outcome: Close to previous best final (1.3553) but not better.
+
+### Analysis
+- Increasing the tail beyond 10% to 12% with a stronger β2 target (0.995) degraded final loss, likely due to overly conservative late updates.
+- Slightly reducing β2 to 0.985 at tail=10% maintained stability (near‑zero rebound) but did not beat 1.3553.
+
+### Conclusion
+No improvement over the current best final (1.3553) was achieved. The best performing setting remains:
+`lr=4.5e-3, eta_min_factor=0.01, warmup_pct=0.25, tail_squeeze_pct=0.10, beta2_tail=0.99, grad_accum_steps=2`.
+
+### Figures
+#### Micro‑tune A: eta_min=0.005, tail=0.12, β2=0.995
+![Val Loss](../docs/figures/Experiment_6dA_Micro_tune_(eta_min=0.005,_tail=0.12,_beta2=0.995)_20251016_074223/20251016_loss_val.png)
+![Train Loss](../docs/figures/Experiment_6dA_Micro_tune_(eta_min=0.005,_tail=0.12,_beta2=0.995)_20251016_074223/20251016_loss_train.png)
+![LR](../docs/figures/Experiment_6dA_Micro_tune_(eta_min=0.005,_tail=0.12,_beta2=0.995)_20251016_074223/20251016_lr.png)
+![Tokens/sec](../docs/figures/Experiment_6dA_Micro_tune_(eta_min=0.005,_tail=0.12,_beta2=0.995)_20251016_074223/20251016_perf_tokens_per_sec.png)
+![Perplexity](../docs/figures/Experiment_6dA_Micro_tune_(eta_min=0.005,_tail=0.12,_beta2=0.995)_20251016_074223/20251016_metrics_perplexity.png)
+
+#### Micro‑tune B: eta_min=0.01, tail=0.10, β2=0.985
+![Val Loss](../docs/figures/Experiment_6dB_Micro_tune_(eta_min=0.01,_tail=0.10,_beta2=0.985)_20251016_073825/20251016_loss_val.png)
+![Train Loss](../docs/figures/Experiment_6dB_Micro_tune_(eta_min=0.01,_tail=0.10,_beta2=0.985)_20251016_073825/20251016_loss_train.png)
+![LR](../docs/figures/Experiment_6dB_Micro_tune_(eta_min=0.01,_tail=0.10,_beta2=0.985)_20251016_073825/20251016_lr.png)
+![Tokens/sec](../docs/figures/Experiment_6dB_Micro_tune_(eta_min=0.01,_tail=0.10,_beta2=0.985)_20251016_073825/20251016_perf_tokens_per_sec.png)
+![Perplexity](../docs/figures/Experiment_6dB_Micro_tune_(eta_min=0.01,_tail=0.10,_beta2=0.985)_20251016_073825/20251016_metrics_perplexity.png)
+
+### Next Steps
+- Micro‑tune narrowly around the best:
+  - `beta2_tail ∈ {0.99, 0.9925}` (confirm optimum near 0.99)
+  - `eta_min_factor ∈ {0.0075, 0.01}`
+  - keep `tail_squeeze_pct=0.10`, `warmup_pct=0.25`, `accum=2`
+- If still plateaued, implement Residual Scaling (LayerScale) to seek ~0.5–1% late‑stage improvement.
+
 ## Next Steps
 Based on the successful tail squeeze bug fix, recommended next experiments:
 

@@ -192,3 +192,25 @@
   - Keep `accum=2`; test `tail_squeeze_pct ∈ {0.10, 0.12}`; avoid 8% and 15% for now.
   - If plateau: consider Residual Scaling (LayerScale) as low-risk architectural follow-up.
 
+
+## lr_sched_06dA — Micro-tune A: eta_min=0.005, tail=0.12, β2=0.995
+- **Commit:** `3cd2ee1`
+- **Change:** Increase tail to 12% and stronger β2 damping
+- **Rationale:** Test if longer tail and stronger second-moment damping reduce final loss
+- **Key settings:** `lr=4.5e-3, warmup=0.25, tail=0.12, beta2=0.995, accum=2`
+- **Result:** best val loss = **1.3544**
+- **Figures:**  
+  ![val loss](figures/lr_sched_06dA_loss_val.png)  
+  ![train loss](figures/lr_sched_06dA_loss_train.png)
+
+
+## lr_sched_06dB — Micro-tune B: eta_min=0.01, tail=0.10, β2=0.985
+- **Commit:** `3cd2ee1`
+- **Change:** Slightly lower β2 target at best tail=10%
+- **Rationale:** Verify if reducing β2 improves final while keeping rebound≈0
+- **Key settings:** `lr=4.5e-3, warmup=0.25, tail=0.10, beta2=0.985, accum=2`
+- **Result:** best val loss = **1.3668**
+- **Figures:**  
+  ![val loss](figures/lr_sched_06dB_loss_val.png)  
+  ![train loss](figures/lr_sched_06dB_loss_train.png)
+
