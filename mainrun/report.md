@@ -337,35 +337,127 @@ scaler.update()
 - Improvement vs prior best: FAIL (no improvement over 1.4402 GA-pre-fix), comparable to AMP (1.4470)
 - Proceed per decision matrix: prioritize convergence improvements under stable accumulation (options above)
 
+## Experiment 3c: Gradient Accumulation – Final Stability Fix (bf16/fp16-safe)
+
+### Change Description
+**Before**: Gradient accumulation with potential NaN issues and path resolution problems
+**After**: Fully stabilized gradient accumulation with corrected path resolution, bf16 preference, non-finite gradient guard, proper `zero_grad` placement, increased warmup, tighter gradient clipping, and EMA for evaluation.
+
+### Technical Details
+- **Path Resolution**: Fixed rules checker path to use `pathlib.Path(__file__).parent / "rules" / "check_rules.py"` for correct resolution from `mainrun/` directory.
+- **AMP Precision**: Prioritize `bf16` if supported (no `GradScaler` needed), else `fp16` with `GradScaler`.
+- **`zero_grad` Placement**: Moved to the start of each accumulation window to prevent gradient leakage.
+- **Non-Finite Gradient Guard**: Added checks for `torch.isfinite()` after `clip_grad_norm_` (bf16) or `unscale_` (fp16) to skip steps with invalid gradients.
+- **Gradient Clipping**: Tightened from `1.0` to `0.5` for better stability.
+- **Warmup Adjustment**: Increased warmup percentage to `20%` of total steps when `grad_accum_steps > 1`.
+- **EMA for Evaluation**: Implemented Exponential Moving Average (EMA) for model weights, used only during `evaluate()` calls for smoother validation curves.
+
+### Reasoning
+1. **Fix Path Issues**: Resolve the rules checker path resolution problem that was preventing training from starting.
+2. **Eliminate NaNs**: Address the critical numerical instability caused by compound scaling in previous GA implementation.
+3. **Robust AMP**: Leverage `bf16` for inherent stability, or ensure `fp16` with `GradScaler` is robust.
+4. **Prevent Gradient Leakage**: Correct `zero_grad` placement ensures gradients are properly reset.
+5. **Tighter Clipping**: Further prevents gradient explosion, especially with larger effective batch sizes.
+6. **Smoother Early Training**: Increased warmup helps stabilize initial steps with accumulated gradients.
+7. **Reliable Validation**: EMA provides a more stable and representative view of model performance during evaluation.
+
+### Training Curve Analysis
+
+#### Validation Loss Comparison
+**Before (GA with NaNs)**:
+![GA with NaNs Validation Loss](../docs/figures/20251015_grad_accum_03/20251015_loss_val.png)
+- **Best Loss**: 1.4402 (achieved early)
+- **Pattern**: Initial improvement, then sharp increase to NaN from epoch 6.
+- **Stability**: Highly unstable in later epochs.
+
+**After (GA Final Stability Fix)**:
+![GA Final Fix Validation Loss](../docs/figures/20251016_001856/20251016_loss_val.png)
+- **Final Loss**: 1.3835
+- **Pattern**: Smooth, stable convergence throughout all 7 epochs.
+- **Stability**: Excellent - no NaNs, consistent improvement.
+
+#### Learning Rate Schedule
+![GA Final Fix LR](../docs/figures/20251016_001856/20251016_lr.png)
+- **Pattern**: Smooth warmup followed by cosine decay with floor.
+- **Effect**: Proper LR scheduling without the "jaggedness" from previous runs.
+
+#### Training Loss
+![GA Final Fix Training Loss](../docs/figures/20251016_001856/20251016_loss_train.png)
+- **Pattern**: Steady decrease with good convergence.
+- **Stability**: Smooth training loss curve throughout.
+
+#### Performance Metrics
+![GA Final Fix Tokens/sec](../docs/figures/20251016_001856/20251016_perf_tokens_per_sec.png)
+- **Throughput**: Maintained ~2,500 tokens/sec.
+- **Efficiency**: Good performance with gradient accumulation.
+
+### Quantitative Analysis
+
+#### Performance Metrics
+- **Best Validation Loss**: 1.3835 (vs 1.4402 previous best, 3.9% improvement from best, 21.1% improvement vs baseline)
+- **Training Stability**: ✅ **EXCELLENT** - No NaN values, stable training throughout all 7 epochs.
+- **Memory Usage**: Maintained reduced memory footprint with gradient accumulation.
+- **Training Speed**: Maintained ~2,500 tokens/sec.
+- **Skipped Updates**: 0 (indicating robust gradient handling).
+
+#### Convergence Analysis
+- **Final vs Best**: 1.3835 (final) vs 1.4402 (previous best) = 3.9% improvement
+- **vs Baseline**: 1.3835 vs 1.754 (baseline) = 21.1% improvement
+- **Stability**: Complete elimination of NaN issues
+- **Convergence**: Smooth, consistent improvement throughout training
+
+### Key Insights
+1. **Stability Achieved**: Gradient accumulation now runs without any numerical instability.
+2. **Significant Improvement**: Final validation loss (1.3835) is better than the previous best (1.4402), indicating the previous "best" was an artifact of early, unstable convergence.
+3. **Path Resolution**: Fixed the rules checker path issue that was preventing training from starting.
+4. **Robust Training**: The combination of bf16, proper gradient handling, and EMA provides very stable training.
+5. **Effective Batch Size**: Gradient accumulation with 4 steps provides good gradient estimates while maintaining memory efficiency.
+
+### Gate
+- Stability: ✅ **PASS** (no NaNs, excellent stability)
+- Improvement vs prior best: ✅ **PASS** (1.3835 vs 1.4402 = 3.9% improvement)
+- Improvement vs baseline: ✅ **PASS** (1.3835 vs 1.754 = 21.1% improvement)
+- **Result**: Major success - both stability and performance improvements achieved
+
 ## Next Steps
-Based on current progress, recommended next experiments:
+Based on the successful stabilization and significant improvement (21.1% better than baseline), recommended next experiments:
 
-1. **Fix Gradient Accumulation Stability** (CRITICAL):
-   - **Goal**: Resolve NaN instability in gradient accumulation
-   - **Expected Impact**: Stable training with better convergence
-   - **Risk**: Low (implementation fix)
-   - **Priority**: **CRITICAL** (blocking other experiments)
+1. **Learning Rate Optimization**:
+   - **Goal**: Further optimize learning rate for the stabilized accumulation dynamics.
+   - **Hypothesis**: Current LR (6e-3) might be suboptimal for the effective batch size of 256.
+   - **Action**: Perform LR sweep (e.g., `lr` in `{4e-3, 5e-3, 6e-3, 7e-3, 8e-3}`) while keeping `grad_accum_steps=4`.
+   - **Metrics**: Best validation loss, convergence speed.
+   - **Gate**: Best val loss improves by ≥0.01 vs 1.3835.
+   - **Priority**: High (direct impact on final performance).
 
-2. **SDPA Attention**: 
-   - **Goal**: Optimized attention implementation
-   - **Expected Impact**: 10-20% speed improvement
-   - **Risk**: Low (PyTorch native optimization)
-   - **Priority**: Medium (speed optimization)
+2. **SDPA Attention**:
+   - **Goal**: Optimize attention implementation for speed and potential stability.
+   - **Hypothesis**: PyTorch's native SDPA is faster and potentially more stable.
+   - **Action**: Replace manual attention with `torch.nn.functional.scaled_dot_product_attention`.
+   - **Metrics**: Tokens/sec, validation loss parity.
+   - **Gate**: Tokens/sec +10% with no loss regression.
+   - **Priority**: Medium (speed optimization).
 
-3. **EMA Weights for Evaluation**:
-   - **Goal**: Better validation metrics using exponential moving average
-   - **Expected Impact**: More stable validation curves
-   - **Risk**: Medium (evaluation logic changes)
-   - **Priority**: Medium (evaluation improvement)
+3. **EMA Decay Tuning**:
+   - **Goal**: Optimize EMA decay rate for validation.
+   - **Hypothesis**: A slightly different decay might yield even better validation metrics.
+   - **Action**: Experiment with `ema_decay` in `{0.995, 0.999, 0.9999}`.
+   - **Metrics**: Validation loss smoothness, final best val.
+   - **Gate**: Smoother val curve and equal or better best val.
+   - **Priority**: Low (refinement).
 
 4. **Architecture Refinements**:
-   - **Goal**: Scaled residual initialization, mild regularization
-   - **Expected Impact**: Better training dynamics
-   - **Risk**: Medium (model architecture changes)
-   - **Priority**: Medium (potential convergence improvement)
+   - **Goal**: Scaled residual initialization, mild regularization.
+   - **Hypothesis**: Better initialization and regularization could improve convergence.
+   - **Action**: Implement scaled residual initialization and mild dropout adjustments.
+   - **Metrics**: Best validation loss, training stability.
+   - **Gate**: Best val loss improves by ≥0.005.
+   - **Priority**: Medium (potential convergence improvement).
 
 5. **Tokenizer & Packing Optimization**:
-   - **Goal**: Better data utilization and sequence packing
-   - **Expected Impact**: Improved data efficiency
-   - **Risk**: Low-Medium (data pipeline changes)
-   - **Priority**: Low (data optimization)
+   - **Goal**: Better data utilization and sequence packing.
+   - **Hypothesis**: More efficient data usage could improve convergence.
+   - **Action**: Implement sequence packing and optimize tokenizer settings.
+   - **Metrics**: Data efficiency, validation loss.
+   - **Gate**: Improved data efficiency with no loss regression.
+   - **Priority**: Low (data optimization).

@@ -27,4 +27,5 @@ logs/
 
 # Exported scalar tables (kept in runs; not in repo)
 docs/figures/*.csv
+docs/figures/*/*.csv
 
