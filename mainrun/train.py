@@ -3,6 +3,7 @@ import math, random, time
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import argparse
 
 import torch
 import torch.nn as nn
@@ -38,6 +39,36 @@ class Hyperparameters:
     num_titles: int = 100_000
     val_frac: float = 0.10
     log_file: str = "./logs/mainrun.log"
+
+class WarmupCosineWithFloor:
+    """Learning rate scheduler with warmup followed by cosine decay to a non-zero floor.
+    
+    WHAT: Single warmup phase followed by smooth cosine decay to eta_min
+    WHY: Prevents early instability, provides smooth decay, maintains learning at end
+    IMPACT: Better convergence, no late-epoch rebounds, stable final performance
+    """
+    def __init__(self, base_lr, eta_min, warmup_steps, total_steps):
+        self.base_lr = base_lr
+        self.eta_min = eta_min
+        self.warmup_steps = max(1, warmup_steps)
+        self.total = total_steps
+        self.step_idx = 0
+    
+    def get_lr(self):
+        """Get current learning rate based on step count."""
+        t = self.step_idx
+        if t < self.warmup_steps:
+            # Linear warmup: lr = base_lr * (t + 1) / warmup_steps
+            return self.base_lr * (t + 1) / self.warmup_steps
+        
+        # Cosine decay: progress from 0 to 1 over remaining steps
+        progress = (t - self.warmup_steps) / max(1, self.total - self.warmup_steps)
+        cos = 0.5 * (1 + math.cos(math.pi * progress))
+        return self.eta_min + (self.base_lr - self.eta_min) * cos
+    
+    def step(self):
+        """Increment step counter."""
+        self.step_idx += 1
 
 def configure_logging(log_file: str):
     Path(log_file).parent.mkdir(parents=True, exist_ok=True)
@@ -241,7 +272,19 @@ class GPT(nn.Module):
         return logits, loss
 
 def main():
+    # Parse command line arguments for LR sweep
+    parser = argparse.ArgumentParser(description='Train GPT-2 style model with LR optimization')
+    parser.add_argument('--lr', type=float, default=6e-3, help='Base learning rate')
+    parser.add_argument('--eta_min_factor', type=float, default=0.2, help='LR floor as fraction of base LR')
+    parser.add_argument('--grad_accum_steps', type=int, default=4, help='Gradient accumulation steps')
+    parser.add_argument('--sweep_mode', action='store_true', help='Run LR sweep and exit')
+    cli_args = parser.parse_args()
+    
+    # Create hyperparameters with CLI overrides
     args = Hyperparameters()
+    args.lr = cli_args.lr
+    args.grad_accum_steps = cli_args.grad_accum_steps
+    
     torch.manual_seed(args.seed)
     random.seed(args.seed)
     
@@ -353,20 +396,21 @@ def main():
     amp_dtype = torch.bfloat16 if use_bf16 else torch.float16
     scaler = None if use_bf16 else GradScaler()
 
-    # LR schedule: linear warmup then cosine decay to an LR floor
-    # WHY: Warmup avoids early instability; LR floor prevents the LR from collapsing to zero.
-    # Stability: increase warmup when using gradient accumulation
-    # WHAT: Use longer warmup (20%) when grad_accum is active to smooth early updates
-    # WHY: Accumulation changes update cadence; a gentler ramp reduces early spikes
-    warmup_ratio = 0.2 if args.grad_accum_steps > 1 else 0.1
-    warmup_steps = max(1, min(1000, int(warmup_ratio * max_steps)))
-    lr_min = args.lr * 0.10  # 10% floor
-    def _lr_schedule(step_idx: int) -> float:
-        if step_idx <= warmup_steps:
-            return args.lr * (step_idx / warmup_steps)
-        progress = (step_idx - warmup_steps) / max(1, (max_steps - warmup_steps))
-        cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
-        return lr_min + (args.lr - lr_min) * cosine
+    # LR schedule: single warmup → cosine decay to non-zero floor (no restarts)
+    # WHAT: Compute total steps and warmup based on gradient accumulation
+    # WHY: Prevents late-epoch rebounds, maintains learning at end, smooth convergence
+    optim_steps_per_epoch = math.ceil(batches / args.grad_accum_steps)
+    total_optim_steps = optim_steps_per_epoch * args.epochs
+    warmup_steps = round(0.10 * total_optim_steps) if args.grad_accum_steps == 1 else round(0.20 * total_optim_steps)
+    eta_min = cli_args.eta_min_factor * args.lr  # Non-zero floor
+    
+    # Create LR scheduler instance
+    lr_scheduler = WarmupCosineWithFloor(
+        base_lr=args.lr,
+        eta_min=eta_min,
+        warmup_steps=warmup_steps,
+        total_steps=total_optim_steps
+    )
 
     # Persist immutable run metadata for reporting
     try:
@@ -452,8 +496,9 @@ def main():
                     scaler.scale(scaled_loss).backward()
             
             # Update weights after accumulating gradients from all micro-batches
-            # WHAT: Apply accumulated gradients to model parameters
-            # WHY: Single update per effective batch instead of per micro-batch
+            # WHAT: Apply accumulated gradients to model parameters with proper stepping order
+            # WHY: LR scheduler should only step after successful optimizer updates
+            step_successful = False
             if scaler is None:
                 # bf16 path: clip and step directly
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
@@ -465,6 +510,7 @@ def main():
                 else:
                     opt.step()
                     effective_updates += 1
+                    step_successful = True
                     # Update EMA state after successful optimizer step
                     with torch.no_grad():
                         for (n, p), s in zip(model.named_parameters(), ema_state):
@@ -488,18 +534,21 @@ def main():
                     scaler.step(opt)
                     scaler.update()
                     effective_updates += 1
+                    step_successful = True
                     # Update EMA state after successful optimizer step
                     with torch.no_grad():
                         for (n, p), s in zip(model.named_parameters(), ema_state):
                             if p.requires_grad:
                                 s["data"].mul_(ema_decay).add_(p.data, alpha=1.0 - ema_decay)
             
-            # Only increment step counter after full gradient update
-            step += 1
-            
-            # Manual LR schedule application (logs reflect current LR)
-            for pg in opt.param_groups:
-                pg["lr"] = _lr_schedule(step)
+            # Only increment step counter and update LR after successful optimizer step
+            if step_successful:
+                step += 1
+                # Update LR using new scheduler (call step() after optimizer.step())
+                lr_scheduler.step()
+                current_lr = lr_scheduler.get_lr()
+                for pg in opt.param_groups:
+                    pg["lr"] = current_lr
 
             elapsed = time.time() - t0
             
@@ -559,6 +608,49 @@ def main():
         }, indent=2))
     except Exception:
         pass
+    
+    # Log final statistics and warnings
+    final_val_loss = evaluate()  # Get final validation loss
+    logger.log("training_complete",
+               final_val_loss=final_val_loss,
+               best_val_loss=best_val,
+               skipped_updates=skipped_update_count,
+               effective_updates=effective_updates,
+               total_steps=step)
+    
+    # Warning: Check for late-epoch rebound
+    if final_val_loss > best_val + 0.03:
+        logger.log("warning_late_rebound",
+                   final_val=final_val_loss,
+                   best_val=best_val,
+                   difference=final_val_loss - best_val,
+                   prnt=True)
+    
+    # Print summary table for LR sweep
+    print(f"\n=== Training Summary ===")
+    print(f"Base LR: {args.lr:.2e}")
+    print(f"Eta Min: {eta_min:.2e} ({cli_args.eta_min_factor:.1f}x base)")
+    print(f"Grad Accum Steps: {args.grad_accum_steps}")
+    print(f"Total Optim Steps: {total_optim_steps}")
+    print(f"Warmup Steps: {warmup_steps}")
+    print(f"Final Val Loss: {final_val_loss:.6f}")
+    print(f"Best Val Loss: {best_val:.6f}")
+    print(f"Skipped Updates: {skipped_update_count}")
+    print(f"Effective Updates: {effective_updates}")
+    
+    # Log to sweep file if in sweep mode
+    if cli_args.sweep_mode:
+        sweep_log = Path("logs/lr_sweep.jsonl")
+        sweep_log.parent.mkdir(parents=True, exist_ok=True)
+        with open(sweep_log, "a") as f:
+            f.write(json.dumps({
+                "base_lr": args.lr,
+                "eta_min": eta_min,
+                "accum": args.grad_accum_steps,
+                "final_val": final_val_loss,
+                "best_val": best_val,
+                "skipped_updates": skipped_update_count
+            }) + "\n")
 
 if __name__ == "__main__":
     try:
