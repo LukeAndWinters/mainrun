@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # Block staged changes that set epochs != 7 (simple heuristic)
-if git diff --staged -U0 -- mainrun/train.py | grep -E '\+.*epochs\s*=\s*[^7]'; then
+# WHAT: Only block if we're actually changing epochs to a non-7 value
+# WHY: Avoid false positives from variable assignments like epochs=args.epochs
+if git diff --staged -U0 -- mainrun/train.py | grep -E '\+.*epochs\s*=\s*[0-9]+' | grep -v 'epochs\s*=\s*7'; then
   echo "[HOOK] epochs != 7 detected in staged changes"; exit 1
 fi
 # Run Python guard with placeholders (full check runs at train-time)

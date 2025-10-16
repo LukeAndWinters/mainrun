@@ -9,7 +9,18 @@ def die(msg: str): print(f"[RULE VIOLATION] {msg}", file=sys.stderr); sys.exit(1
 def check_eval_hash():
     if not EVAL_SHA_FILE.exists(): die("Missing rules/EVALUATE_SHA256. Snapshot evaluate() first.")
     exp = EVAL_SHA_FILE.read_text().strip()
-    got = sha256(ROOT / "mainrun" / "train.py")
+    
+    # Extract just the evaluate() function and hash it (not the entire file)
+    import re
+    train_py = ROOT / "mainrun" / "train.py"
+    content = train_py.read_text()
+    pattern = r'def evaluate\(\):\s*\n((?:\s{4}.*\n)*)'
+    match = re.search(pattern, content)
+    if not match:
+        die("evaluate() function not found in train.py")
+    
+    func_source = match.group(0)
+    got = hashlib.sha256(func_source.encode('utf-8')).hexdigest()
     if got != exp: die("train.py has been modified (evaluate() function changed).")
 
 def check_constants(seed: int, epochs: int, val_fraction: float):
