@@ -314,6 +314,8 @@ def main():
     parser.add_argument('--warmup_pct', type=float, default=0.20, help='Warmup as percentage of total steps')
     parser.add_argument('--tail_squeeze', action='store_true', help='Enable linear decay to 0 in final 10% of steps')
     parser.add_argument('--tail_squeeze_pct', type=float, default=0.10, help='Percentage of steps for tail squeeze')
+    parser.add_argument('--beta2_tail', type=float, default=None, help='Target beta2 for late training (None = no damping)')
+    parser.add_argument('--tail_beta2_start_pct', type=float, default=0.30, help='Start beta2 interpolation at this fraction of total steps')
     parser.add_argument('--sweep_mode', action='store_true', help='Run LR sweep and exit')
     cli_args = parser.parse_args()
     
@@ -439,7 +441,7 @@ def main():
     # BUGFIX: Use actual number of optimizer steps, not calculated micro-batch steps
     total_optim_steps = batches * args.epochs  # Actual optimizer steps taken during training
     warmup_steps = round(cli_args.warmup_pct * total_optim_steps)
-    eta_min = cli_args.eta_min_factor * args.lr
+    eta_min = max(0.0, cli_args.eta_min_factor * args.lr)  # Allow 0 as valid floor
     tail_squeeze_steps = round(cli_args.tail_squeeze_pct * total_optim_steps) if cli_args.tail_squeeze else 0
     
     # Create LR scheduler instance
@@ -483,6 +485,8 @@ def main():
             "warmup_pct": cli_args.warmup_pct,
             "tail_squeeze": cli_args.tail_squeeze,
             "tail_squeeze_pct": cli_args.tail_squeeze_pct if cli_args.tail_squeeze else 0,
+            "beta2_tail": cli_args.beta2_tail,
+            "tail_beta2_start_pct": cli_args.tail_beta2_start_pct,
             "weight_decay": args.weight_decay,
             "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }, indent=2))
@@ -518,6 +522,11 @@ def main():
 
     skipped_update_count = 0
     effective_updates = 0
+    
+    # LR tracking for enhanced logging
+    lr_history = []
+    min_lr = float('inf')
+    max_lr = 0.0
 
     for epoch in range(1, args.epochs + 1):
         for batch_idx in tqdm(range(1, batches + 1), desc=f"Epoch {epoch}/{args.epochs}"):
@@ -601,6 +610,25 @@ def main():
                 current_lr = lr_scheduler.get_lr()
                 for pg in opt.param_groups:
                     pg["lr"] = current_lr
+                
+                # Track LR for enhanced logging
+                lr_history.append(current_lr)
+                min_lr = min(min_lr, current_lr)
+                max_lr = max(max_lr, current_lr)
+                
+                # Beta2 damping: reduce second-moment estimates in late training
+                # WHAT: Linearly interpolate beta2 from base (0.95) to target (beta2_tail) 
+                # WHY: Prevents optimizer from being too conservative near end of training
+                # IMPACT: Better generalization and convergence in final epochs
+                if cli_args.beta2_tail is not None:
+                    beta2_start_step = int(cli_args.tail_beta2_start_pct * total_optim_steps)
+                    if step >= beta2_start_step:
+                        # Linear interpolation from base beta2 (0.95) to beta2_tail
+                        progress = (step - beta2_start_step) / (total_optim_steps - beta2_start_step)
+                        current_beta2 = 0.95 + (cli_args.beta2_tail - 0.95) * progress
+                        # Update optimizer beta2 for all parameter groups
+                        for pg in opt.param_groups:
+                            pg['betas'] = (0.9, current_beta2)
 
             elapsed = time.time() - t0
             
@@ -685,6 +713,11 @@ def main():
     print(f"Grad Accum Steps: {args.grad_accum_steps}")
     print(f"Total Optim Steps: {total_optim_steps}")
     print(f"Warmup Steps: {warmup_steps}")
+    print(f"LR Range: {min_lr:.6f} - {max_lr:.6f}")
+    print(f"Last 5 LRs: {[f'{lr:.6f}' for lr in lr_history[-5:]]}")
+    if cli_args.beta2_tail is not None:
+        final_beta2 = opt.param_groups[0]['betas'][1]
+        print(f"Final Beta2: {final_beta2:.4f}")
     print(f"Final Val Loss: {final_val_loss:.6f}")
     print(f"Best Val Loss: {best_val:.6f}")
     print(f"Skipped Updates: {skipped_update_count}")

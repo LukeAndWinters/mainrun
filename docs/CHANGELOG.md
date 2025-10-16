@@ -160,3 +160,35 @@
   ![val loss](figures/tail_squeeze_fix_loss_val.png)  
   ![train loss](figures/tail_squeeze_fix_loss_train.png)
 
+
+## rebound_fix_06c — Enhanced Tail Squeeze + Beta2 Damping Sweep
+- **Commit:** `TBD`
+- **Change:** Systematic 8-config sweep adding late-training beta2 damping with tail squeeze; compared warmup %, tail duration, eta_min floor, and accumulation.
+- **Rationale:** Eliminate late-epoch rebound while maintaining best-in-run convergence; test whether second-moment damping (beta2 → 0.98–0.99) plus a short tail squeeze (10%) improves final validation loss.
+- **Key settings (sweeped):**
+  - `lr=4.5e-3`
+  - `eta_min_factor ∈ {0.00, 0.01, 0.02}`
+  - `warmup_pct ∈ {0.25, 0.30}`
+  - `tail_squeeze=True` with `tail_squeeze_pct ∈ {0.08, 0.10, 0.15}` (except control)
+  - `grad_accum_steps ∈ {2, 4}`
+  - `beta2_tail ∈ {None, 0.98, 0.99}` starting at `tail_beta2_start_pct=0.30`
+- **Representative results (Final | Best | Rebound):**
+  - tail_pct=0.08, beta2=0.98, warmup=0.25, accum=2 → 1.3791 | 1.3615 | 0.0176
+  - tail_pct=0.10, beta2=0.99, warmup=0.25, accum=2 → 1.3553 | 1.3562 | -0.0009  ← Best final
+  - tail_pct=0.10, beta2=0.98, warmup=0.30, accum=2 → 1.3622 | 1.3503 | 0.0119
+  - tail_pct=0.10, beta2=0.98, warmup=0.25, accum=4 → 1.4509 | 1.2236 | 0.2273
+  - CONTROL (no tail squeeze, eta_min=0.02, accum=2) → 1.4053 | 1.3620 | 0.0433
+- **Observations:**
+  1. Beta2 damping helps: 0.99 outperformed 0.98 on final loss at matched settings.
+  2. Tail squeeze 10% > 8% for final loss; 15% did not improve over 10% in this grid.
+  3. Longer warmup (30%) slightly worsened final loss vs 25% under tail squeeze.
+  4. Accum=4 re-introduced a large rebound; Accum=2 remained stable (skipped_updates=0).
+  5. CONTROL without tail squeeze shows higher rebound (0.0433) and worse final (1.4053).
+- **Result:**
+  - Best final validation loss: **1.3553** with near-zero rebound (**-0.0009**) at `lr=4.5e-3, eta_min_factor=0.01, warmup_pct=0.25, tail_pct=0.10, beta2_tail=0.99, accum=2`.
+  - Target rebound ≤ 0.01: **PASS** (best config). Target final ≤ 1.33: **NOT YET**.
+- **Next Steps:**
+  - Narrow sweep around the best: `beta2_tail ∈ {0.985, 0.995}`, `eta_min_factor ∈ {0.005, 0.01}`; confirm robustness.
+  - Keep `accum=2`; test `tail_squeeze_pct ∈ {0.10, 0.12}`; avoid 8% and 15% for now.
+  - If plateau: consider Residual Scaling (LayerScale) as low-risk architectural follow-up.
+

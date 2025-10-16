@@ -719,6 +719,39 @@ The systematic nature of the rebound suggests it's not a parameter tuning issue 
 - Performance: ⚠️ **ACCEPTABLE** (1.351401 vs 1.310431 previous best)
 - **Result**: Major success in fixing the tail squeeze implementation
 
+## Experiment 6c: Tail Squeeze + Beta2 Damping Sweep (Focused Refinement)
+
+### Change Description
+Before: Cosine-with-floor schedule (or tail-squeeze) without second-moment damping. After: Added late-training beta2 damping (interpolating β2→target in the final 70% of steps) plus short tail squeeze. Ran an 8-config sweep varying eta_min_factor, warmup_pct, tail_squeeze_pct, beta2_tail, and accumulation steps.
+
+### Key Configurations and Outcomes
+- tail_pct=0.08, beta2=0.98, warmup=0.25, accum=2 → Final=1.3791, Best=1.3615, Rebound=0.0176
+- tail_pct=0.10, beta2=0.99, warmup=0.25, accum=2 → Final=1.3553, Best=1.3562, Rebound=−0.0009  (Best final)
+- tail_pct=0.10, beta2=0.98, warmup=0.30, accum=2 → Final=1.3622, Best=1.3503, Rebound=0.0119
+- tail_pct=0.10, beta2=0.98, warmup=0.25, accum=4 → Final=1.4509, Best=1.2236, Rebound=0.2273 (Unstable)
+- Control (no tail squeeze, eta_min=0.02, accum=2) → Final=1.4053, Best=1.3620, Rebound=0.0433
+
+### Analysis
+- Tail squeeze (10%) + β2 damping to 0.99 at warmup 0.25, accum 2 eliminated rebound (≈0) and achieved the best final result (1.3553).
+- Longer warmup (0.30) was slightly worse on final than 0.25 under tail squeeze.
+- Accumulation=4 reintroduced large rebound despite excellent transient best; reject as unstable for our 7-epoch constraint.
+- Control (no tail squeeze) shows higher rebound and worse final, confirming tail squeeze + β2 helps maintain late performance.
+
+### Metrics (targets vs achieved)
+- Rebound ≤ 0.01: PASS (−0.0009 at best final config)
+- Final validation loss ≤ 1.33: NOT YET (1.3553)
+- Stability: PASS (0 skipped updates, monotonic LR after warmup)
+
+### Decision and Next Steps
+1. Micro-tune around the best final configuration to shave ~2% off final loss while keeping rebound ≈0:
+   - beta2_tail ∈ {0.985, 0.995}
+   - eta_min_factor ∈ {0.005, 0.01}
+   - tail_squeeze_pct ∈ {0.10, 0.12}
+   - Keep: warmup_pct=0.25, grad_accum_steps=2, tail_squeeze=True
+2. If plateau persists: add Residual Scaling (LayerScale-style learnable residual scales) to improve late-stage stability with minimal risk.
+
+Data and logs: see `logs/tail_squeeze_sweep.jsonl` and summary `logs/tail_squeeze_sweep_summary.json`. Figures can be exported via the snapshot task for the latest run directory when needed.
+
 ## Next Steps
 Based on the successful tail squeeze bug fix, recommended next experiments:
 
