@@ -532,6 +532,27 @@ scaler.update()
 - **Trade-off**: Better rebound but higher overall validation loss
 - **Optimal**: 4-step accumulation provides better best validation loss
 
+### Training Curve Analysis
+
+#### Best Configuration (LR = 4.8e-3, Accum = 4)
+![Best LR Sweep Configuration](../docs/figures/Experiment_4_LR_Schedule_Optimization_20251016_014831/20251016_loss_val.png)
+- **Final Val Loss**: 1.5562
+- **Best Val Loss**: 1.3356 (achieved mid-training)
+- **Rebound**: 0.221 (significant late-epoch increase)
+- **Pattern**: Clear rebound starting around epoch 5-6
+
+#### Learning Rate Schedule
+![Best Configuration LR Schedule](../docs/figures/Experiment_4_LR_Schedule_Optimization_20251016_014831/20251016_lr.png)
+- **Pattern**: Smooth warmup → cosine decay to floor
+- **Range**: 4.8e-3 → 9.6e-4 (20% of base LR)
+- **Issue**: Cosine decay might be too aggressive for 7-epoch budget
+
+#### Training Loss Progression
+![Best Configuration Training Loss](../docs/figures/Experiment_4_LR_Schedule_Optimization_20251016_014831/20251016_loss_train.png)
+- **Convergence**: Steady decrease throughout training
+- **Stability**: No training instability
+- **Pattern**: Smooth training loss curve
+
 ### Analysis of Rebound Problem
 
 #### **Root Cause Analysis**
@@ -649,11 +670,33 @@ The systematic nature of the rebound suggests it's not a parameter tuning issue 
 4. **Verification**: Debug scripts confirmed correct LR values throughout training
 
 ### Training Curve Analysis
+
+#### Validation Loss - Before vs After Tail Squeeze Fix
+**Before (Broken Tail Squeeze)**:
+![Broken Tail Squeeze Validation Loss](../docs/figures/Experiment_6_Rebound_Fix___Best_Configuration_20251016_041842/20251016_loss_val.png)
+- **Pattern**: Massive explosion in final epochs (rebound > 500)
+- **Root Cause**: Negative learning rates from incorrect step calculation
+- **Stability**: Training completely unstable
+
+**After (Fixed Tail Squeeze)**:
+![Fixed Tail Squeeze Validation Loss](../docs/figures/Experiment_6b_Tail_Squeeze_Bug_Fix_20251016_042801/20251016_loss_val.png)
 - **Final Val Loss**: 1.349287 (excellent convergence)
 - **Best Val Loss**: 1.351401 (achieved during training)
 - **Rebound**: 0.002114 (minimal, well below 0.03 target)
 - **Stability**: 0 skipped updates, 1883 effective updates
-- **LR Schedule**: Smooth warmup → cosine decay → linear tail squeeze to 0
+
+#### Learning Rate Schedule Comparison
+**Broken Scheduler (Negative LRs)**:
+![Broken LR Schedule](../docs/figures/Experiment_6_Rebound_Fix___Best_Configuration_20251016_041842/20251016_lr.png)
+- **Issue**: Scheduler runs past intended steps
+- **Result**: Negative learning rates in tail squeeze phase
+- **Impact**: Training explosion
+
+**Fixed Scheduler (Smooth Decay)**:
+![Fixed LR Schedule](../docs/figures/Experiment_6b_Tail_Squeeze_Bug_Fix_20251016_042801/20251016_lr.png)
+- **Pattern**: Smooth warmup → cosine decay → linear tail squeeze to 0
+- **Range**: 4.5e-3 → 2.25e-4 → 0 (proper progression)
+- **Stability**: No negative values, correct step count
 
 ### Quantitative Analysis
 - **Rebound Reduction**: 0.002114 vs 518.16 (99.9996% improvement)
