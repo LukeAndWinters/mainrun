@@ -127,7 +127,9 @@ def _guard_rules(train_cfg):
         "seed": train_cfg["seed"],
         "val_fraction": train_cfg["val_fraction"],
     }})
-    rules_py = str(pathlib.Path("mainrun/rules/check_rules.py"))
+    # WHAT: Resolve path from repository root, not from mainrun/
+    # WHY: train.py runs from mainrun/, so relative path needs to go up one level
+    rules_py = str(pathlib.Path(__file__).parent.parent / "rules" / "check_rules.py")
     p = subprocess.run([sys.executable, rules_py, "--payload", payload])
     if p.returncode != 0: sys.exit(p.returncode)
 # --- end guard ---
