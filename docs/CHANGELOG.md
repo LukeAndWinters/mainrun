@@ -76,3 +76,14 @@
   ![val loss](figures/grad_accum_stability_fix_05_loss_val.png)  
   ![train loss](figures/grad_accum_stability_fix_05_loss_train.png)
 
+
+## grad_accum_stability_fix_05 — Gradient Accumulation: Final Stability Fix (bf16/fp16-safe)
+- **Commit:** `6b3520e`
+- **Change:** Implemented stability fixes for gradient accumulation: prioritized bf16, added non-finite gradient guard, ensured zero_grad at accumulation window start, increased warmup to 20%, tightened gradient clipping to 0.5, and added EMA for evaluation only.
+- **Rationale:** Eliminate NaNs from accumulation+AMP; keep effective batch benefits; improve early training stability; smooth validation curves.
+- **Key settings:** `grad_accum_steps=4; micro_batch_size=16; amp_dtype=bf16|fp16; grad_clip=0.5; warmup=20%; ema_decay=0.999`
+- **Result:** best val loss = **1.3835**
+- **Figures:**  
+  ![val loss](figures/grad_accum_stability_fix_05_loss_val.png)  
+  ![train loss](figures/grad_accum_stability_fix_05_loss_train.png)
+

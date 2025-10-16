@@ -371,23 +371,23 @@ scaler.update()
 - **Stability**: Highly unstable in later epochs.
 
 **After (GA Final Stability Fix)**:
-![GA Final Fix Validation Loss](../docs/figures/20251016_001856/20251016_loss_val.png)
+![GA Final Fix Validation Loss](../docs/figures/Experiment_3c_Gradient_Accumulation_Final_Stability_Fix_20251016_001856/20251016_loss_val.png)
 - **Final Loss**: 1.3835
 - **Pattern**: Smooth, stable convergence throughout all 7 epochs.
 - **Stability**: Excellent - no NaNs, consistent improvement.
 
 #### Learning Rate Schedule
-![GA Final Fix LR](../docs/figures/20251016_001856/20251016_lr.png)
+![GA Final Fix LR](../docs/figures/Experiment_3c_Gradient_Accumulation_Final_Stability_Fix_20251016_001856/20251016_lr.png)
 - **Pattern**: Smooth warmup followed by cosine decay with floor.
 - **Effect**: Proper LR scheduling without the "jaggedness" from previous runs.
 
 #### Training Loss
-![GA Final Fix Training Loss](../docs/figures/20251016_001856/20251016_loss_train.png)
+![GA Final Fix Training Loss](../docs/figures/Experiment_3c_Gradient_Accumulation_Final_Stability_Fix_20251016_001856/20251016_loss_train.png)
 - **Pattern**: Steady decrease with good convergence.
 - **Stability**: Smooth training loss curve throughout.
 
 #### Performance Metrics
-![GA Final Fix Tokens/sec](../docs/figures/20251016_001856/20251016_perf_tokens_per_sec.png)
+![GA Final Fix Tokens/sec](../docs/figures/Experiment_3c_Gradient_Accumulation_Final_Stability_Fix_20251016_001856/20251016_perf_tokens_per_sec.png)
 - **Throughput**: Maintained ~2,500 tokens/sec.
 - **Efficiency**: Good performance with gradient accumulation.
 

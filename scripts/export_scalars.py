@@ -17,6 +17,7 @@ def main():
     ap.add_argument("--run_dir", required=True)
     ap.add_argument("--out_dir", default="docs/figures")
     ap.add_argument("--run_name", default=None, help="Optional run name for file identification")
+    ap.add_argument("--exp_name", default=None, help="Experiment name for subdirectory labeling")
     args = ap.parse_args()
     run = pathlib.Path(args.run_dir); out = pathlib.Path(args.out_dir)
     
@@ -38,8 +39,16 @@ def main():
     # Get current date for filename prefix
     current_date = datetime.now().strftime("%Y%m%d")
     
-    # Create subdirectory for this experiment
-    exp_dir = out / run_id
+    # Create subdirectory with experiment name and timestamp
+    # Format: "Experiment_X_Name_YYYYMMDD_HHMMSS" for better organization
+    if args.exp_name:
+        # Clean experiment name: replace spaces with underscores, remove special chars
+        clean_exp_name = args.exp_name.replace(" ", "_").replace(":", "").replace("-", "_")
+        exp_dir_name = f"{clean_exp_name}_{run_id}"
+    else:
+        exp_dir_name = run_id
+    
+    exp_dir = out / exp_dir_name
     exp_dir.mkdir(parents=True, exist_ok=True)
     
     ea = EventAccumulator(str(run)); ea.Reload()
