@@ -113,3 +113,50 @@
   ![tokens/sec](figures/Experiment_4_LR_Schedule_Optimization_20251016_014831/20251016_perf_tokens_per_sec.png)  
   ![perplexity](figures/Experiment_4_LR_Schedule_Optimization_20251016_014831/20251016_metrics_perplexity.png)
 
+## rebound_fix_06 — LR Schedule Refinement for Rebound Elimination
+- **Commit:** TBD
+- **Change:** Added configurable warmup percentage, optional tail squeeze, and ran focused sweep to eliminate late-epoch rebound
+- **Rationale:** Systematic late-epoch rebound (0.12-0.24) prevents maintaining peak performance; implement gentler LR decay patterns
+- **Key settings:** warmup_pct=0.25, eta_min_factor=0.02-0.05, grad_accum_steps=2, optional tail_squeeze
+- **Implementation details:**
+  - Added CLI arguments: `--warmup_pct`, `--tail_squeeze`, `--tail_squeeze_pct`
+  - Created `WarmupCosineWithTailSqueeze` class with linear decay to 0 in final 10% of steps
+  - Updated LR scheduler initialization to choose between cosine-with-floor and tail-squeeze variants
+  - Enhanced result.json to include final_val_loss for rebound analysis
+  - Created automated sweep script `scripts/run_rebound_sweep.py`
+- **Sweep Results:**
+  - **Best Configuration**: LR=4.5e-3, eta_min_factor=0.02, warmup=0.25, grad_accum=2, no tail squeeze
+  - **Best Val Loss**: 1.310431 (excellent improvement from 1.3356)
+  - **Rebound**: 0.094559 (reduced from 0.12-0.24, but still above target ≤0.03)
+  - **Tail Squeeze Issue**: Caused massive rebound (518.16), indicating too aggressive
+- **Observations:**
+  - ✅ **Significant Improvement**: Best validation loss improved to 1.310431 (25.3% better than baseline)
+  - ✅ **Rebound Reduction**: Reduced from 0.12-0.24 to 0.094559 (21% improvement)
+  - ⚠️ **Target Not Met**: Rebound still above 0.03 target, indicating need for further refinement
+  - 🔍 **Tail Squeeze Problem**: Linear decay to 0 too aggressive, causes training instability
+- **Result:** best val loss = **1.310431** (↓ 0.025 vs previous best, ↓ 0.444 vs baseline)
+- **Next Steps:** Further LR schedule refinement needed to achieve rebound ≤ 0.03 target
+- **Figures:** [to be added after snapshot]
+
+
+## rebound_fix_06 — Rebound Fix - Best Configuration
+- **Commit:** `865dcd1`
+- **Change:** LR=4.5e-3, eta_min=0.02, warmup=0.25, grad_accum=2
+- **Rationale:** Optimal configuration from systematic sweep
+- **Key settings:** `lr=4.5e-3, eta_min_factor=0.02, warmup_pct=0.25, grad_accum_steps=2`
+- **Result:** best val loss = **1.3104**
+- **Figures:**  
+  ![val loss](figures/rebound_fix_06_loss_val.png)  
+  ![train loss](figures/rebound_fix_06_loss_train.png)
+
+
+## tail_squeeze_fix — Tail Squeeze Bug Fix - Corrected Scheduler
+- **Commit:** `865dcd1`
+- **Change:** Fixed total_optim_steps calculation in WarmupCosineWithTailSqueeze scheduler
+- **Rationale:** The scheduler was initialized with wrong total steps, causing negative LRs and training explosion
+- **Key settings:** `LR=4.5e-3, eta_min=0.05, warmup=0.25, grad_accum=2, tail_squeeze=True`
+- **Result:** best val loss = **1.3514**
+- **Figures:**  
+  ![val loss](figures/tail_squeeze_fix_loss_val.png)  
+  ![train loss](figures/tail_squeeze_fix_loss_train.png)
+

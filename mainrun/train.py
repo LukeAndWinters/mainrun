@@ -70,6 +70,40 @@ class WarmupCosineWithFloor:
         """Increment step counter."""
         self.step_idx += 1
 
+class WarmupCosineWithTailSqueeze:
+    """LR scheduler with warmup, cosine decay, and optional tail squeeze to 0.
+    
+    WHAT: Warmup → cosine decay to eta_min → linear decay to 0 in final tail_pct
+    WHY: Prevents rebound by eliminating residual learning rate in final steps
+    IMPACT: Smoother convergence, monotonic validation loss, eliminates late-epoch instability
+    """
+    def __init__(self, base_lr, eta_min, warmup_steps, total_steps, tail_squeeze_steps):
+        self.base_lr = base_lr
+        self.eta_min = eta_min
+        self.warmup_steps = max(1, warmup_steps)
+        self.total = total_steps
+        self.tail_start = total_steps - tail_squeeze_steps
+        self.tail_squeeze_steps = max(1, tail_squeeze_steps)
+        self.step_idx = 0
+    
+    def get_lr(self):
+        t = self.step_idx
+        if t < self.warmup_steps:
+            # Linear warmup
+            return self.base_lr * (t + 1) / self.warmup_steps
+        elif t < self.tail_start:
+            # Cosine decay to eta_min
+            progress = (t - self.warmup_steps) / max(1, self.tail_start - self.warmup_steps)
+            cos = 0.5 * (1 + math.cos(math.pi * progress))
+            return self.eta_min + (self.base_lr - self.eta_min) * cos
+        else:
+            # Tail squeeze: linear decay from eta_min to 0
+            progress = (t - self.tail_start) / self.tail_squeeze_steps
+            return self.eta_min * (1 - progress)
+    
+    def step(self):
+        self.step_idx += 1
+
 def configure_logging(log_file: str):
     Path(log_file).parent.mkdir(parents=True, exist_ok=True)
     
@@ -277,6 +311,9 @@ def main():
     parser.add_argument('--lr', type=float, default=6e-3, help='Base learning rate')
     parser.add_argument('--eta_min_factor', type=float, default=0.2, help='LR floor as fraction of base LR')
     parser.add_argument('--grad_accum_steps', type=int, default=4, help='Gradient accumulation steps')
+    parser.add_argument('--warmup_pct', type=float, default=0.20, help='Warmup as percentage of total steps')
+    parser.add_argument('--tail_squeeze', action='store_true', help='Enable linear decay to 0 in final 10% of steps')
+    parser.add_argument('--tail_squeeze_pct', type=float, default=0.10, help='Percentage of steps for tail squeeze')
     parser.add_argument('--sweep_mode', action='store_true', help='Run LR sweep and exit')
     cli_args = parser.parse_args()
     
@@ -396,21 +433,31 @@ def main():
     amp_dtype = torch.bfloat16 if use_bf16 else torch.float16
     scaler = None if use_bf16 else GradScaler()
 
-    # LR schedule: single warmup → cosine decay to non-zero floor (no restarts)
-    # WHAT: Compute total steps and warmup based on gradient accumulation
+    # LR schedule: single warmup → cosine decay to non-zero floor (optional tail squeeze)
+    # WHAT: Configurable warmup percentage and optional tail squeeze for gentler convergence
     # WHY: Prevents late-epoch rebounds, maintains learning at end, smooth convergence
-    optim_steps_per_epoch = math.ceil(batches / args.grad_accum_steps)
-    total_optim_steps = optim_steps_per_epoch * args.epochs
-    warmup_steps = round(0.10 * total_optim_steps) if args.grad_accum_steps == 1 else round(0.20 * total_optim_steps)
-    eta_min = cli_args.eta_min_factor * args.lr  # Non-zero floor
+    # BUGFIX: Use actual number of optimizer steps, not calculated micro-batch steps
+    total_optim_steps = batches * args.epochs  # Actual optimizer steps taken during training
+    warmup_steps = round(cli_args.warmup_pct * total_optim_steps)
+    eta_min = cli_args.eta_min_factor * args.lr
+    tail_squeeze_steps = round(cli_args.tail_squeeze_pct * total_optim_steps) if cli_args.tail_squeeze else 0
     
     # Create LR scheduler instance
-    lr_scheduler = WarmupCosineWithFloor(
-        base_lr=args.lr,
-        eta_min=eta_min,
-        warmup_steps=warmup_steps,
-        total_steps=total_optim_steps
-    )
+    if cli_args.tail_squeeze:
+        lr_scheduler = WarmupCosineWithTailSqueeze(
+            base_lr=args.lr,
+            eta_min=eta_min,
+            warmup_steps=warmup_steps,
+            total_steps=total_optim_steps,
+            tail_squeeze_steps=tail_squeeze_steps
+        )
+    else:
+        lr_scheduler = WarmupCosineWithFloor(
+            base_lr=args.lr,
+            eta_min=eta_min,
+            warmup_steps=warmup_steps,
+            total_steps=total_optim_steps
+        )
 
     # Persist immutable run metadata for reporting
     try:
@@ -431,6 +478,11 @@ def main():
             "d_model": args.d_model,
             "dropout": args.dropout,
             "lr": args.lr,
+            "eta_min_factor": cli_args.eta_min_factor,
+            "eta_min": eta_min,
+            "warmup_pct": cli_args.warmup_pct,
+            "tail_squeeze": cli_args.tail_squeeze,
+            "tail_squeeze_pct": cli_args.tail_squeeze_pct if cli_args.tail_squeeze else 0,
             "weight_decay": args.weight_decay,
             "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }, indent=2))
@@ -600,16 +652,17 @@ def main():
                           loss=val_loss,
                           elapsed_time=elapsed)
 
+    # Log final statistics and warnings
+    final_val_loss = evaluate()  # Get final validation loss
+    
     # Persist best validation result for this run
     try:
         (run_dir / "result.json").write_text(json.dumps({
-            "best_val_loss": float(best_val)
+            "best_val_loss": float(best_val),
+            "final_val_loss": float(final_val_loss)
         }, indent=2))
     except Exception:
         pass
-    
-    # Log final statistics and warnings
-    final_val_loss = evaluate()  # Get final validation loss
     logger.log("training_complete",
                final_val_loss=final_val_loss,
                best_val_loss=best_val,
