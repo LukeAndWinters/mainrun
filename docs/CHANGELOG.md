@@ -87,3 +87,29 @@
   ![val loss](figures/grad_accum_stability_fix_05_loss_val.png)  
   ![train loss](figures/grad_accum_stability_fix_05_loss_train.png)
 
+
+## lr_schedule_06 — LR Schedule Optimization: WarmupCosineWithFloor
+- **Commit:** `5c30274`
+- **Change:** Implemented WarmupCosineWithFloor class with single warmup → cosine decay to non-zero floor, corrected gradient accumulation stepping order, and added comprehensive logging with rebound warnings.
+- **Rationale:** Fix late-epoch rebounds and optimize LR behavior for better convergence within 7-epoch budget. Single warmup phase prevents early instability, cosine decay provides smooth convergence, and non-zero floor sustains learning in final epochs.
+- **Key settings:** `lr=5.4e-3, eta_min_factor=0.2, grad_accum_steps=4, warmup=20%, total_steps=945`
+- **Implementation details:**
+  - Created `WarmupCosineWithFloor` class with proper step counting
+  - Fixed LR scheduler to step only after successful optimizer updates
+  - Added CLI arguments for easy parameter tuning (`--lr`, `--eta_min_factor`, `--grad_accum_steps`)
+  - Enhanced logging with final statistics, rebound warnings, and training summary
+  - Added LR sweep infrastructure (`scripts/run_lr_sweep.py`)
+- **Observations:**
+  - ✅ **LR Schedule**: Smooth warmup → cosine decay pattern (no oscillations)
+  - ✅ **Stability**: 0 skipped updates, perfect gradient accumulation
+  - ⚠️ **Late Rebound**: Final val loss (1.6069) > best val loss (1.3626) by 0.244
+  - 📊 **Improvement**: Best val loss improved to 1.3626 (↓ 0.021 vs previous best)
+- **Result:** best val loss = **1.3626** (↓ 0.021 vs previous best, ↓ 0.391 vs baseline)
+- **Next Steps:** Run LR sweep to find optimal parameters and eliminate late-epoch rebound
+- **Figures:**  
+  ![val loss](figures/Experiment_4_LR_Schedule_Optimization_20251016_014831/20251016_loss_val.png)  
+  ![train loss](figures/Experiment_4_LR_Schedule_Optimization_20251016_014831/20251016_loss_train.png)  
+  ![lr](figures/Experiment_4_LR_Schedule_Optimization_20251016_014831/20251016_lr.png)  
+  ![tokens/sec](figures/Experiment_4_LR_Schedule_Optimization_20251016_014831/20251016_perf_tokens_per_sec.png)  
+  ![perplexity](figures/Experiment_4_LR_Schedule_Optimization_20251016_014831/20251016_metrics_perplexity.png)
+

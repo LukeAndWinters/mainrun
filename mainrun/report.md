@@ -3,8 +3,8 @@
 ## Executive Summary
 - **Goal**: Minimize validation loss within exactly 7 epochs
 - **Baseline**: 1.7533 (SGD optimizer, fixed LR)
-- **Best Result**: 1.4452 (AdamW + warmup-cosine LR floor)
-- **Improvement**: 17.6% reduction in validation loss
+- **Best Result**: 1.3626 (LR Schedule Optimization with WarmupCosineWithFloor)
+- **Improvement**: 22.3% reduction in validation loss
 
 ## Experiment 1: AdamW + Warmup-Cosine LR Floor
 
@@ -419,16 +419,87 @@ scaler.update()
 - Improvement vs baseline: ✅ **PASS** (1.3835 vs 1.754 = 21.1% improvement)
 - **Result**: Major success - both stability and performance improvements achieved
 
-## Next Steps
-Based on the successful stabilization and significant improvement (21.1% better than baseline), recommended next experiments:
+## Experiment 4: LR Schedule Optimization - WarmupCosineWithFloor
 
-1. **Learning Rate Optimization**:
-   - **Goal**: Further optimize learning rate for the stabilized accumulation dynamics.
-   - **Hypothesis**: Current LR (6e-3) might be suboptimal for the effective batch size of 256.
-   - **Action**: Perform LR sweep (e.g., `lr` in `{4e-3, 5e-3, 6e-3, 7e-3, 8e-3}`) while keeping `grad_accum_steps=4`.
-   - **Metrics**: Best validation loss, convergence speed.
-   - **Gate**: Best val loss improves by ≥0.01 vs 1.3835.
-   - **Priority**: High (direct impact on final performance).
+### Change Description
+**Before**: Linear warmup followed by cosine decay with restarts (previous LR schedule)
+**After**: Single warmup phase followed by smooth cosine decay to non-zero floor (no restarts)
+
+### Technical Details
+- **LR Schedule Class**: Implemented `WarmupCosineWithFloor` with proper step counting
+- **Stepping Order**: Fixed LR scheduler to step only after successful optimizer updates
+- **CLI Arguments**: Added `--lr`, `--eta_min_factor`, `--grad_accum_steps` for easy parameter tuning
+- **Enhanced Logging**: Added final statistics, rebound warnings, and training summary
+- **Sweep Infrastructure**: Created `scripts/run_lr_sweep.py` for systematic parameter optimization
+- **Key Parameters**: `lr=5.4e-3`, `eta_min_factor=0.2`, `warmup=20%`, `total_steps=945`
+
+### Reasoning
+1. **Single Warmup**: Prevents early instability without complex restart logic
+2. **Cosine Decay**: Provides smooth convergence without sudden LR drops
+3. **Non-zero Floor**: Sustains learning in final epochs within 7-epoch budget
+4. **Proper Stepping**: Ensures LR scheduler only advances after successful gradient updates
+5. **Rebound Detection**: Warns when final validation loss significantly exceeds best
+
+### Training Curve Analysis
+
+#### Validation Loss
+**After (LR Schedule Optimization)**:
+![LR Schedule Validation Loss](../docs/figures/Experiment_4_LR_Schedule_Optimization_20251016_014831/20251016_loss_val.png)
+- **Best Val Loss**: 1.3626 (excellent improvement!)
+- **Final Val Loss**: 1.6069 (late-epoch rebound detected)
+- **Pattern**: Smooth convergence initially, then rebound in later epochs
+- **Stability**: Perfect - 0 skipped updates throughout training
+
+#### Learning Rate Schedule
+![LR Schedule LR](../docs/figures/Experiment_4_LR_Schedule_Optimization_20251016_014831/20251016_lr.png)
+- **Pattern**: Smooth warmup → cosine decay with floor
+- **Warmup Phase**: Linear increase over 189 steps (20% of total)
+- **Decay Phase**: Cosine decay to 1.08e-3 (20% of base LR)
+- **Effect**: No oscillations, proper LR adaptation
+
+#### Training Loss
+![LR Schedule Training Loss](../docs/figures/Experiment_4_LR_Schedule_Optimization_20251016_014831/20251016_loss_train.png)
+- **Pattern**: Steady decrease with good convergence
+- **Stability**: Smooth training loss curve throughout
+- **Convergence**: Consistent improvement across all epochs
+
+#### Performance Metrics
+![LR Schedule Tokens/sec](../docs/figures/Experiment_4_LR_Schedule_Optimization_20251016_014831/20251016_perf_tokens_per_sec.png)
+- **Throughput**: Maintained ~2,500 tokens/sec
+- **Efficiency**: Good performance with gradient accumulation
+- **Stability**: Consistent throughput throughout training
+
+### Quantitative Analysis
+- **Best Val Loss**: 1.3626 (↓ 0.021 vs previous best 1.3835)
+- **vs Baseline**: 1.3626 vs 1.754 (↓ 22.3% improvement)
+- **Late Rebound**: Final val (1.6069) > best val (1.3626) by 0.244
+- **Stability**: 0 skipped updates (perfect gradient handling)
+- **LR Schedule**: Smooth warmup-cosine pattern (no oscillations)
+
+### Key Insights
+1. **LR Schedule Working**: The new `WarmupCosineWithFloor` class provides smooth, predictable LR behavior
+2. **Significant Improvement**: Best validation loss improved to 1.3626 (22.3% better than baseline)
+3. **Late Rebound Issue**: Final validation loss rebounds significantly, indicating suboptimal LR parameters
+4. **Perfect Stability**: 0 skipped updates shows excellent gradient accumulation handling
+5. **Optimization Opportunity**: LR sweep needed to find optimal parameters and eliminate rebound
+
+### Gate
+- LR Schedule Implementation: ✅ **PASS** (smooth warmup-cosine pattern)
+- Stability: ✅ **PASS** (0 skipped updates, perfect gradient handling)
+- Improvement vs previous best: ✅ **PASS** (1.3626 vs 1.3835 = 1.5% improvement)
+- Improvement vs baseline: ✅ **PASS** (1.3626 vs 1.754 = 22.3% improvement)
+- **Result**: Major success - new LR schedule working, significant improvement achieved, but late rebound needs optimization
+
+## Next Steps
+Based on the successful LR schedule implementation and significant improvement (22.3% better than baseline), recommended next experiments:
+
+1. **Learning Rate Sweep**:
+   - **Goal**: Find optimal LR parameters to eliminate late-epoch rebound and maximize final performance.
+   - **Hypothesis**: Current LR (5.4e-3) and eta_min_factor (0.2) are suboptimal, causing late-epoch rebound.
+   - **Action**: Run systematic LR sweep using `scripts/run_lr_sweep.py` to test multiple LR/eta_min combinations.
+   - **Metrics**: Final validation loss, best validation loss, convergence stability.
+   - **Gate**: Final val loss within 0.05 of best val loss (eliminate rebound).
+   - **Priority**: High (critical for final performance optimization).
 
 2. **SDPA Attention**:
    - **Goal**: Optimize attention implementation for speed and potential stability.

@@ -590,7 +590,6 @@ def main():
                     best_val = val_loss
                 
                 # after each validation
-                import math
                 val_ppl = math.exp(val_loss)
                 writer.add_scalar("loss/val", float(val_loss), step)
                 writer.add_scalar("metrics/perplexity", val_ppl, step)
