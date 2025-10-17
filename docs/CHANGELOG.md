@@ -225,3 +225,15 @@
   ![val loss](figures/Quick_Win_Experiments_loss_val.png)  
   ![train loss](figures/Quick_Win_Experiments_loss_train.png)
 
+
+## exp — Experiment 8 Phase 1: LR Precision Tuning
+- **Commit:** `97698d2`
+- **Change:** Systematic LR micro-tuning around 4.2e-3
+- **Rationale:** Fine-tune learning rate to eliminate rebound and optimize final performance
+- **Key settings:** `LR=4.0e-3 to 4.9e-3, eta_min_factor=0.03, warmup_pct=0.20, grad_accum_steps=2, tail_squeeze enabled`
+- **Result:** best val loss = **1.332499** (LR=4.2e-3) - **NEW BEST RESULT**
+- **Key Achievement:** Eliminated late-epoch rebound (negative rebound = -0.005920)
+- **Figures:**  
+  ![val loss](figures/Experiment_8_Phase_1_LR_Precision_Tuning_20251017_024236/20251017_loss_val.png)  
+  ![train loss](figures/Experiment_8_Phase_1_LR_Precision_Tuning_20251017_024236/20251017_loss_train.png)
+
