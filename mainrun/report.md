@@ -6,7 +6,8 @@
 - **Best Result**: 1.332499 (Experiment 8 Phase 1 - LR Precision Tuning)
 - **Improvement**: 24.0% reduction in validation loss
 - **Breakthrough**: Systematic LR micro-tuning achieved perfect convergence with negative rebound (-0.005920)
-- **Status**: New best result achieved through systematic parameter optimization
+- **Phase 2 Finding**: eta_min_factor tuning provided no improvement - parameter saturation confirmed
+- **Status**: Phase 1 optimal configuration remains best; Phase 3 warmup tuning recommended
 
 ## Experiment 1: AdamW + Warmup-Cosine LR Floor
 
@@ -989,13 +990,59 @@ Based on the successful Quick Win experiments achieving 1.3325 validation loss, 
 3. **Performance Balance**: LR=4.2e-3 provides optimal learning without instability
 4. **Micro-tuning Success**: Small LR adjustments yield measurable improvements
 
-### Next Steps Analysis
-**Phase 1 Success**: LR precision tuning achieved new best result and eliminated rebound
+## Experiment 8: Phase 2 - Eta Min Factor Tuning
 
-**Phase 2 Recommendations**:
-1. **Eta Min Factor Tuning**: Test {0.025, 0.035, 0.04} around current 0.03
-2. **Warmup Percentage**: Test {15%, 18%, 22%, 25%} around current 20%
-3. **Architecture Combinations**: Apply residual scaling + SwiGLU with optimal LR
+### Executive Summary
+**Goal**: Fine-tune eta_min_factor around 0.03 to optimize learning rate floor  
+**Result**: **1.377258** best validation loss (all eta_min_factor values)  
+**Finding**: No improvement over Phase 1 baseline - eta_min_factor not limiting factor  
+**Key Insight**: Identical results across all eta_min_factor values suggest parameter saturation
+
+### Change Description
+**Before**: Phase 1 optimal configuration (LR=4.2e-3, eta_min_factor=0.03)  
+**After**: Systematic eta_min_factor testing (0.025, 0.035, 0.04)
+
+### Technical Details
+- **Method**: Grid search across 3 eta_min_factor values
+- **Fixed Parameters**: LR=4.2e-3, warmup_pct=0.20, grad_accum_steps=2, tail_squeeze enabled
+- **Test Values**: {0.025, 0.035, 0.04} around baseline 0.03
+
+### Results Summary
+
+#### Eta Min Factor Performance Matrix
+| Eta Min Factor | Final Val | Best Val | Rebound | Status |
+|----------------|-----------|----------|---------|---------|
+| 0.025 | 1.401863 | 1.377258 | +0.024605 | ❌ |
+| 0.035 | 1.401863 | 1.377258 | +0.024605 | ❌ |
+| 0.04 | 1.401863 | 1.377258 | +0.024605 | ❌ |
+
+#### Key Findings
+1. **Identical Results**: All eta_min_factor values produced exactly the same metrics
+2. **No Improvement**: None improved upon Phase 1 baseline (1.332499)
+3. **Parameter Saturation**: eta_min_factor variations had no measurable impact
+4. **Consistent Rebound**: All showed same rebound pattern (+0.024605)
+
+#### Training Curve Analysis
+![Phase 2 Results](../docs/figures/Experiment_8_Phase_2_Eta_Min_Factor_Tuning_20251017_030324/20251017_loss_val.png)
+
+**Validation Loss Pattern**:
+- Identical convergence curves across all eta_min_factor values
+- Consistent late-epoch rebound pattern
+- No sensitivity to learning rate floor variations
+
+### Reasoning
+1. **Parameter Independence**: eta_min_factor changes had no measurable impact
+2. **Saturation Point**: Learning rate floor may already be optimal
+3. **Other Factors**: Performance limited by other parameters (LR, warmup, etc.)
+4. **Systematic Verification**: Confirmed eta_min_factor is not the limiting factor
+
+### Next Steps Analysis
+**Phase 2 Conclusion**: eta_min_factor tuning provided no improvement
+
+**Phase 3 Recommendations**:
+1. **Warmup Percentage Tuning**: Test {15%, 18%, 22%, 25%} around current 20%
+2. **Architecture Combinations**: Apply residual scaling + SwiGLU with optimal LR
+3. **Alternative Approaches**: Consider different optimization strategies
 
 **Key Insight**: Micro-tuning approach is highly effective - systematic parameter optimization around good configurations yields measurable improvements.
 

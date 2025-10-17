@@ -237,3 +237,14 @@
   ![val loss](figures/Experiment_8_Phase_1_LR_Precision_Tuning_20251017_024236/20251017_loss_val.png)  
   ![train loss](figures/Experiment_8_Phase_1_LR_Precision_Tuning_20251017_024236/20251017_loss_train.png)
 
+
+## exp — Experiment 8 Phase 2: Eta Min Factor Tuning
+- **Commit:** `cc21501`
+- **Change:** Systematic eta_min_factor tuning around 0.03
+- **Rationale:** Fine-tune learning rate floor to optimize final performance
+- **Key settings:** `eta_min_factor=0.025,0.035,0.04, LR=4.2e-3, warmup_pct=0.20, grad_accum_steps=2, tail_squeeze enabled`
+- **Result:** best val loss = **1.3773**
+- **Figures:**  
+  ![val loss](figures/exp_loss_val.png)  
+  ![train loss](figures/exp_loss_train.png)
+
