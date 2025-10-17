@@ -248,3 +248,25 @@
   ![val loss](figures/exp_loss_val.png)  
   ![train loss](figures/exp_loss_train.png)
 
+## Experiment 8 Phase 3: Warmup Percentage Tuning
+- **Commit:** `ffadef8`
+- **Change:** Systematic warmup percentage tuning around 20%
+- **Rationale:** Fine-tune warmup duration to optimize early training stability
+- **Key settings:** `warmup_pct=0.15,0.18,0.22,0.25, LR=4.2e-3, eta_min_factor=0.03, grad_accum_steps=2, tail_squeeze enabled`
+- **Result:** best val loss = **1.3539**
+- **Key Finding:** Warmup percentage parameter saturation - minimal impact on performance
+- **Figures:**  
+  ![val loss](../docs/figures/Experiment_8_Phase_3_Warmup_Percentage_Tuning_20251016_120000_20251017_033209/20251017_loss_val.png)  
+  ![train loss](../docs/figures/Experiment_8_Phase_3_Warmup_Percentage_Tuning_20251016_120000_20251017_033209/20251017_loss_train.png)
+
+
+## exp — iteration
+- **Commit:** `ffadef8`
+- **Change:** n/a
+- **Rationale:** n/a
+- **Key settings:** ``
+- **Result:** best val loss = **0.0000**
+- **Figures:**  
+  ![val loss](figures/exp_loss_val.png)  
+  ![train loss](figures/exp_loss_train.png)
+

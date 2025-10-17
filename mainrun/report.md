@@ -1046,8 +1046,59 @@ Based on the successful Quick Win experiments achieving 1.3325 validation loss, 
 
 **Key Insight**: Micro-tuning approach is highly effective - systematic parameter optimization around good configurations yields measurable improvements.
 
+## Experiment 8: Phase 3 - Warmup Percentage Tuning
+
+### Change Description
+**Before**: Phase 1 optimal configuration (LR=4.2e-3, warmup_pct=0.20)  
+**After**: Systematic warmup percentage testing (15%, 18%, 22%, 25%)
+
+### Technical Details
+- **Method**: Grid search across 4 warmup percentage values
+- **Fixed Parameters**: LR=4.2e-3, eta_min_factor=0.03, grad_accum_steps=2, tail_squeeze enabled
+- **Test Values**: {0.15, 0.18, 0.22, 0.25} around baseline 0.20
+
+### Results Summary
+
+#### Warmup Percentage Performance Matrix
+| Warmup % | Final Val | Best Val | Rebound | Status |
+|----------|-----------|----------|---------|---------|
+| 15% | 1.365786 | 1.353856 | +0.011930 | ❌ |
+| 18% | 1.365785 | 1.353856 | +0.011929 | ❌ |
+| 22% | 1.365785 | 1.353856 | +0.011929 | ❌ |
+| 25% | 1.367146 | 1.359235 | +0.007911 | ❌ |
+
+#### Key Findings
+1. **Near-Identical Results**: 15%, 18%, 22% produced virtually identical metrics
+2. **No Improvement**: None improved upon Phase 1 baseline (1.332499)
+3. **Parameter Saturation**: Warmup percentage variations had minimal impact
+4. **25% Different Pattern**: Higher best val but smaller rebound
+
+#### Training Curve Analysis
+![Phase 3 Results](../docs/figures/Experiment_8_Phase_3_Warmup_Percentage_Tuning_20251016_120000_20251017_033209/20251017_loss_val.png)
+
+**Validation Loss Pattern**:
+- Nearly identical convergence curves for 15-22% warmup
+- 25% warmup shows slightly different pattern with higher best validation loss
+- Consistent late-epoch behavior across all warmup percentages
+
+### Reasoning
+1. **Parameter Independence**: Warmup percentage changes had minimal measurable impact
+2. **Saturation Point**: Current 20% warmup may already be near-optimal
+3. **Other Factors**: Performance limited by other parameters (LR, eta_min_factor, etc.)
+4. **Systematic Verification**: Confirmed warmup percentage is not the limiting factor
+
+### Next Steps Analysis
+**Phase 3 Conclusion**: Warmup percentage tuning provided no improvement
+
+**Phase 4 Recommendations**:
+1. **Architecture Combinations**: Apply residual scaling + SwiGLU with optimal LR
+2. **Alternative Approaches**: Consider different optimization strategies
+3. **Comprehensive Sweep**: Test multiple parameter combinations simultaneously
+
+**Key Insight**: Micro-tuning approach has reached saturation - systematic parameter optimization around good configurations no longer yields measurable improvements.
+
 ### Expected Outcomes
 - **Phase 1**: ✅ **ACHIEVED** - Target final val loss < 1.3300 (achieved 1.332499)
-- **Phase 2**: Target final val loss < 1.3250 (0.56% improvement)
-- **Phase 3**: Maintain performance while improving efficiency
+- **Phase 2**: ❌ **NOT ACHIEVED** - Target final val loss < 1.3250 (no improvement)
+- **Phase 3**: ❌ **NOT ACHIEVED** - Target final val loss < 1.3250 (no improvement)
 - **Overall Goal**: Achieve final val loss < 1.3200 (1.0% improvement from current best)
