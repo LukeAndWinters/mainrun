@@ -20,9 +20,9 @@ class Hyperparameters:
     block_size: int = 128
     batch_size: int = 64
     vocab_size: int = 16_000
-    n_layer: int = 6
+    n_layer: int = 8  # Changed from 6 to 8 for Experiment 16
     n_head: int = 8
-    d_model: int = 768
+    d_model: int = 512  # Reverted from 768 to 512 (optimal from Experiment 15)
     dropout: float = 0.1
     lr: float = 6e-3
     weight_decay: float = 0.0
