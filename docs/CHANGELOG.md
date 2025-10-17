@@ -1,5 +1,24 @@
 # Experiment 
 
+## [2025-01-17] Experiment 17: Label Smoothing (ε=0.1, n_layer=6)
+
+### Added
+- Label smoothing option via `--label_smoothing` (applies to training loss only)
+- Documentation and figures for Experiment 17
+
+### Changed
+- Retained 6-layer architecture (Exp14 best) and all optimal settings
+- Regularized CE loss during training with ε=0.1; evaluation untouched
+
+### Results
+- **Best Val Loss**: 1.209958 (≈ tie with Exp14 best 1.209722)
+- **Final Val Loss**: 1.228282 (better than Exp14 final 1.261802)
+- **Rebound**: 0.018324 (improved vs Exp14 0.052080)
+- **Overall**: Positive stabilization without peak regression
+
+### Impact
+Label smoothing improves end-of-training behavior and reduces rebound while preserving top best-val performance. Recommended as default regularization for robustness.
+
 ## [2025-01-16] Experiment 16: Model Depth Scaling (n_layer=8)
 
 ### Added

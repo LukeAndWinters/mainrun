@@ -1716,3 +1716,61 @@ GQA represents a significant architectural improvement, achieving the best valid
 
 ### Strategic Impact
 Depth scaling (n_layer=8) improved stability and final performance but **degraded peak performance** by 1.1%. The 6-layer architecture (Experiment 14) remains optimal for best validation loss, while 8-layer provides better stability at the cost of peak performance.
+
+## Experiment 17: Label Smoothing (ε=0.1, n_layer=6)
+
+### Change Description
+**Before**: No label smoothing; best architecture at n_layer=6 (Exp14)
+**After**: Apply label smoothing ε=0.1 to training CE loss only (evaluation unchanged)
+
+### Technical Details
+- **Label Smoothing**: `--label_smoothing 0.1`
+- **Scope**: Training loss only; `evaluate()` untouched (guarded by rules)
+- **Architecture**: n_layer=6, GQA + RoPE + RMSNorm + Pre-LN + Residual Scaling + SwiGLU
+- **Other Settings**: lr=4.2e-3, warmup_pct=0.20, tail_squeeze enabled, grad_accum_steps=2
+
+### Reasoning
+1. Reduce overconfidence to improve generalization
+2. Keep evaluation strictly identical per constraints
+3. Target lower rebound while preserving best-val performance
+
+### Training Curve Analysis
+
+#### Validation Loss
+![Label Smoothing Validation Loss](../docs/figures/Experiment_17_Label_Smoothing_20251017_062822_20251017_062218/20251017_loss_val.png)
+
+- **Best Performance**: 1.209958 (≈ matches Exp14 best 1.209722; +0.000236)
+- **Final Performance**: 1.228282 (better than Exp14 final 1.261802)
+- **Rebound**: ≈ 0.0183 (improved vs Exp14's 0.0521)
+
+#### Training Loss
+![Label Smoothing Training Loss](../docs/figures/Experiment_17_Label_Smoothing_20251017_062822_20251017_062218/20251017_loss_train.png)
+
+- **Pattern**: Smooth, slightly higher floor as expected with smoothing
+
+#### Learning Rate
+![Label Smoothing LR](../docs/figures/Experiment_17_Label_Smoothing_20251017_062822_20251017_062218/20251017_lr.png)
+
+- **Schedule**: Warmup → cosine → tail squeeze (unchanged)
+
+### Performance Comparison
+
+| Metric | Experiment 14 (no LS) | Experiment 17 (ε=0.1) | Change |
+|--------|-----------------------|------------------------|--------|
+| Best Val | 1.209722 | 1.209958 | +0.000236 (≈ tie) |
+| Final Val | 1.261802 | 1.228282 | -0.03352 (better) |
+| Rebound | 0.052080 | 0.018324 | -64.8% (better) |
+
+### Key Findings
+1. Peak performance effectively unchanged (best-val ≈ tie)
+2. Final validation significantly improved; rebound notably reduced
+3. Label smoothing adds stability without harming best-val
+
+### Results Summary
+- **Final Val Loss**: 1.228282 (better than Exp14's 1.261802)
+- **Best Val Loss**: 1.209958 (≈ tie with 1.209722)
+- **Rebound**: 0.018324 (improved vs 0.052080)
+- **Overall Assessment**: Positive; improved stability and final performance with no peak regression
+
+### Strategic Impact
+Label smoothing (ε=0.1) is a safe, effective regularizer: keeps best-val intact while improving end-of-training behavior. The best result remains from Experiment 14, but this run delivers a stronger final value and substantially lower rebound—good for robustness.
