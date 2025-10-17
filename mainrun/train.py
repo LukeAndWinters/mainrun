@@ -222,6 +222,9 @@ class GPTConfig:
     n_head: int
     d_model: int
     dropout: float
+    # Optional knobs (default keep current behavior)
+    residual_scale: bool = False
+    mlp_activation: str = "gelu"  # "gelu" | "swiglu"
 
 class CausalSelfAttention(nn.Module):
     def __init__(self, cfg: GPTConfig):
@@ -250,13 +253,25 @@ class CausalSelfAttention(nn.Module):
 class MLP(nn.Module):
     def __init__(self, cfg: GPTConfig):
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(cfg.d_model, 4 * cfg.d_model),
-            nn.GELU(),
-            nn.Linear(4 * cfg.d_model, cfg.d_model),
-            nn.Dropout(cfg.dropout),
-        )
-    def forward(self, x): return self.net(x)
+        self.activation = cfg.mlp_activation
+        if self.activation == "swiglu":
+            # SwiGLU: two linear projections with gated SiLU
+            self.w1 = nn.Linear(cfg.d_model, 2 * 4 * cfg.d_model)
+            self.w2 = nn.Linear(4 * cfg.d_model, cfg.d_model)
+            self.drop = nn.Dropout(cfg.dropout)
+        else:
+            self.net = nn.Sequential(
+                nn.Linear(cfg.d_model, 4 * cfg.d_model),
+                nn.GELU(),
+                nn.Linear(4 * cfg.d_model, cfg.d_model),
+                nn.Dropout(cfg.dropout),
+            )
+    def forward(self, x):
+        if self.activation == "swiglu":
+            u, v = self.w1(x).chunk(2, dim=-1)
+            x = self.w2(F.silu(u) * v)
+            return self.drop(x)
+        return self.net(x)
 
 class Block(nn.Module):
     def __init__(self, cfg: GPTConfig):
@@ -265,9 +280,17 @@ class Block(nn.Module):
         self.ln2 = nn.LayerNorm(cfg.d_model)
         self.attn = CausalSelfAttention(cfg)
         self.mlp  = MLP(cfg)
+        self.use_residual_scale = cfg.residual_scale
+        if self.use_residual_scale:
+            self.attn_alpha = nn.Parameter(torch.ones(1))
+            self.mlp_alpha = nn.Parameter(torch.ones(1))
     def forward(self, x):
-        x = x + self.attn(self.ln1(x))
-        x = x + self.mlp(self.ln2(x))
+        if self.use_residual_scale:
+            x = x + self.attn_alpha * self.attn(self.ln1(x))
+            x = x + self.mlp_alpha * self.mlp(self.ln2(x))
+        else:
+            x = x + self.attn(self.ln1(x))
+            x = x + self.mlp(self.ln2(x))
         return x
 
 class GPT(nn.Module):
@@ -317,12 +340,23 @@ def main():
     parser.add_argument('--beta2_tail', type=float, default=None, help='Target beta2 for late training (None = no damping)')
     parser.add_argument('--tail_beta2_start_pct', type=float, default=0.30, help='Start beta2 interpolation at this fraction of total steps')
     parser.add_argument('--sweep_mode', action='store_true', help='Run LR sweep and exit')
+    # Additional sweep flags (safe defaults = no behavior change unless provided)
+    parser.add_argument('--residual_scale', action='store_true', help='Enable residual scaling (LayerScale-style)')
+    parser.add_argument('--mlp_activation', type=str, default='gelu', choices=['gelu','swiglu'], help='MLP activation')
+    parser.add_argument('--pack_tokens', action='store_true', help='Enable dynamic token packing (placeholder, no-op)')
+    parser.add_argument('--dropout', type=float, default=None, help='Override dropout if provided')
+    parser.add_argument('--weight_decay', type=float, default=None, help='Override weight decay if provided')
     cli_args = parser.parse_args()
     
     # Create hyperparameters with CLI overrides
     args = Hyperparameters()
     args.lr = cli_args.lr
     args.grad_accum_steps = cli_args.grad_accum_steps
+    # Optional overrides
+    if cli_args.dropout is not None:
+        args.dropout = cli_args.dropout
+    if cli_args.weight_decay is not None:
+        args.weight_decay = cli_args.weight_decay
     
     torch.manual_seed(args.seed)
     random.seed(args.seed)
@@ -376,6 +410,8 @@ def main():
         n_head     = args.n_head,
         d_model    = args.d_model,
         dropout    = args.dropout,
+        residual_scale = bool(cli_args.residual_scale),
+        mlp_activation = cli_args.mlp_activation,
     )
     model = GPT(cfg).to(device)
     model_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -687,7 +723,27 @@ def main():
     try:
         (run_dir / "result.json").write_text(json.dumps({
             "best_val_loss": float(best_val),
-            "final_val_loss": float(final_val_loss)
+            "final_val_loss": float(final_val_loss),
+            "rebound": float(final_val_loss - best_val),
+            "skipped_updates": int(skipped_update_count),
+            "lr_min": float(min_lr if lr_history else 0.0),
+            "lr_max": float(max_lr if lr_history else 0.0),
+            "last5_lrs": [float(x) for x in lr_history[-5:]],
+            "config": {
+                "lr": float(args.lr),
+                "eta_min_factor": float(cli_args.eta_min_factor),
+                "warmup_pct": float(cli_args.warmup_pct),
+                "tail_squeeze": bool(cli_args.tail_squeeze),
+                "tail_squeeze_pct": float(cli_args.tail_squeeze_pct if cli_args.tail_squeeze else 0.0),
+                "grad_accum_steps": int(args.grad_accum_steps),
+                "beta2_tail": None if cli_args.beta2_tail is None else float(cli_args.beta2_tail),
+                "tail_beta2_start_pct": float(cli_args.tail_beta2_start_pct),
+                "residual_scale": bool(cli_args.residual_scale),
+                "mlp_activation": str(cli_args.mlp_activation),
+                "pack_tokens": bool(cli_args.pack_tokens),
+                "dropout": float(args.dropout),
+                "weight_decay": float(args.weight_decay)
+            }
         }, indent=2))
     except Exception:
         pass

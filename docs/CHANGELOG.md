@@ -214,3 +214,14 @@
   ![val loss](figures/lr_sched_06dB_loss_val.png)  
   ![train loss](figures/lr_sched_06dB_loss_train.png)
 
+
+## Quick_Win_Experiments — Quick Win Optimization Experiments
+- **Commit:** `1512f6f`
+- **Change:** LR micro-tuning, architecture combo, and tail squeeze refinement
+- **Rationale:** Targeted optimization to minimize validation loss with low-risk changes
+- **Key settings:** `LR=4.2e-3, eta_min=0.03, warmup=20%, grad_accum=2, tail_squeeze=10%, beta2_tail=0.99`
+- **Result:** best val loss = **1.3325**
+- **Figures:**  
+  ![val loss](figures/Quick_Win_Experiments_loss_val.png)  
+  ![train loss](figures/Quick_Win_Experiments_loss_train.png)
+
