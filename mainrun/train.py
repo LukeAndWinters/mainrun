@@ -20,7 +20,7 @@ class Hyperparameters:
     block_size: int = 128
     batch_size: int = 64
     vocab_size: int = 16_000
-    n_layer: int = 8  # Changed from 6 to 8 for Experiment 16
+    n_layer: int = 6  # Revert to 6 layers (best peak perf per Exp14)
     n_head: int = 8
     d_model: int = 512  # Reverted from 768 to 512 (optimal from Experiment 15)
     dropout: float = 0.1
@@ -443,6 +443,10 @@ class GPT(nn.Module):
     def __init__(self, cfg: GPTConfig):
         super().__init__()
         self.cfg = cfg
+        # WHAT: Default label smoothing factor for training-time CE loss only
+        # WHY: Allows enabling regularization without affecting evaluation metrics
+        # IMPACT: Improves generalization; evaluate() remains unchanged
+        self.label_smoothing: float = 0.0
         self.token_emb = nn.Embedding(cfg.vocab_size, cfg.d_model)
         
         # WHAT: Conditional positional encoding based on config
@@ -490,7 +494,15 @@ class GPT(nn.Module):
         if targets is None:
             loss = None
         else:
-            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), reduction='mean')
+            # WHAT: Apply label smoothing only during training forward pass
+            # WHY: Regularize predictions; evaluation uses its own CE loss (untouched)
+            # IMPACT: Potentially reduces overconfidence, improves val loss
+            loss = F.cross_entropy(
+                logits.view(-1, logits.size(-1)),
+                targets.view(-1),
+                reduction='mean',
+                label_smoothing=getattr(self, 'label_smoothing', 0.0)
+            )
         return logits, loss
 
 def main():
@@ -515,6 +527,7 @@ def main():
     parser.add_argument('--pack_tokens', action='store_true', help='Enable dynamic token packing (placeholder, no-op)')
     parser.add_argument('--dropout', type=float, default=None, help='Override dropout if provided')
     parser.add_argument('--weight_decay', type=float, default=None, help='Override weight decay if provided')
+    parser.add_argument('--label_smoothing', type=float, default=0.0, help='Label smoothing epsilon for training loss (eval unaffected)')
     cli_args = parser.parse_args()
     
     # Create hyperparameters with CLI overrides
@@ -587,6 +600,10 @@ def main():
         pos_encoding = cli_args.pos_encoding,
     )
     model = GPT(cfg).to(device)
+    # WHAT: Configure training-only label smoothing from CLI
+    # WHY: Allows quick regularization without touching evaluate()
+    # IMPACT: Potential generalization gains with minimal risk
+    model.label_smoothing = max(0.0, float(cli_args.label_smoothing))
     model_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.log("model_info", parameters_count=model_params)
     
