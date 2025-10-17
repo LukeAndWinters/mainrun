@@ -1823,11 +1823,11 @@ Keeping vocab at 16k is preferable under the 7-epoch regime and current model; 3
 - Final val loss: 1.261802
 - Rebound: 0.052080
 - Validation loss figure:
-![Exp14 Validation Loss](../docs/figures/Experiment_14_Grouped_Query_Attention_*/20251017_loss_val.png)
+![Exp14 Validation Loss](../docs/figures/Experiment_14_GQA_20251017_052923/20251017_loss_val.png)
 
 ### Best Final Stability (Experiment 17, ε=0.1)
 - Best val loss: 1.209958 (≈ tie)
 - Final val loss: 1.228282 (improved)
 - Rebound: ≈0.0183 (reduced)
 - Validation loss figure:
-![Exp17 Validation Loss](../docs/figures/Experiment_17_Label_Smoothing_*/20251017_loss_val.png)
+![Exp17 Validation Loss](../docs/figures/Experiment_17_Label_Smoothing_20251017_062822_20251017_062218/20251017_loss_val.png)
