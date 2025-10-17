@@ -14,10 +14,10 @@
 - Added position encoding configuration to `GPTConfig`
 
 ### Results
-- **Final Val Loss**: 1.260637 (vs 1.271026 with MQA)
-- **Best Val Loss**: 1.215451 (vs 1.270052 with MQA)
-- **Rebound**: 0.045185 (vs -0.000974 with MQA)
-- **Overall Assessment**: No net improvement due to higher rebound
+- **Final Val Loss**: 1.260637 (vs 1.271026 with MQA) - **0.8% improvement**
+- **Best Val Loss**: 1.215451 (vs 1.270052 with MQA) - **4.3% improvement**
+- **Rebound**: 0.045185 (vs -0.000974 with MQA) - higher instability
+- **Overall Assessment**: Small net improvement despite higher rebound
 - **Implementation Success**: RoPE worked correctly without errors
 
 ### Technical Details
@@ -28,7 +28,7 @@
 
 ### Architecture
 - RoPE + MQA + RMSNorm + Pre-LN + Residual Scaling + SwiGLU
-- Status: No improvement over MQA baseline - higher rebound observed
+- Status: NEW BEST RESULT - Small improvement over MQA baseline (28.1% over baseline)
 
 ## adamw_warmup_01 — AdamW + warmup-cosine LR floor
 - **Commit:** `7f9c371`

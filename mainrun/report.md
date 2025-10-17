@@ -3,9 +3,9 @@
 ## Executive Summary
 - **Goal**: Minimize validation loss within exactly 7 epochs
 - **Baseline**: 1.7533 (SGD optimizer, fixed LR)
-- **Best Result**: 1.271026 (Experiment 12 - Multi-Query Attention + RMSNorm + Pre-LN + Residual Scaling + SwiGLU)
-- **Improvement**: 27.5% reduction in validation loss
-- **Status**: RoPE implementation completed - no improvement over MQA baseline
+- **Best Result**: 1.260637 (Experiment 13 - RoPE + Multi-Query Attention + RMSNorm + Pre-LN + Residual Scaling + SwiGLU)
+- **Improvement**: 28.1% reduction in validation loss
+- **Status**: RoPE implementation completed - small improvement over MQA baseline
 - **Breakthrough**: Multi-Query Attention achieved 5.1% improvement over previous best
 - **Architecture**: Modern transformer with MQA, RMSNorm, Pre-LN, residual scaling, and SwiGLU
 - **Status**: Complete architectural modernization with optimal performance achieved
@@ -1504,23 +1504,23 @@ MQA implementation represents a significant architectural advancement, achieving
 
 | Metric | MQA (Exp 12) | RoPE (Exp 13) | Change |
 |--------|--------------|---------------|---------|
-| Final Val Loss | 1.271026 | 1.260637 | +0.010389 |
-| Best Val Loss | 1.270052 | 1.215451 | -0.054601 |
-| Rebound | -0.000974 | +0.045185 | +0.046159 |
+| Final Val Loss | 1.271026 | 1.260637 | -0.010389 ✅ |
+| Best Val Loss | 1.270052 | 1.215451 | -0.054601 ✅ |
+| Rebound | -0.000974 | +0.045185 | +0.046159 ❌ |
 | Architecture | MQA + RMSNorm + Pre-LN | RoPE + MQA + RMSNorm + Pre-LN | - |
 
 ### Key Findings
-1. **No Improvement**: RoPE did not improve over MQA baseline (1.271 vs 1.261)
+1. **Small Improvement**: RoPE achieved slightly better final validation loss (1.261 vs 1.271)
 2. **Higher Rebound**: RoPE showed more late-epoch instability (0.045 vs -0.001)
-3. **Better Best**: RoPE achieved better best validation loss (1.215 vs 1.270)
+3. **Much Better Best**: RoPE achieved significantly better best validation loss (1.215 vs 1.270)
 4. **Implementation Success**: RoPE implementation worked correctly without errors
 5. **Architecture Compatibility**: RoPE integrated well with existing MQA + RMSNorm + Pre-LN
 
 ### Results Summary
-- **Final Val Loss**: 1.260637 (vs 1.271026 with MQA)
-- **Best Val Loss**: 1.215451 (vs 1.270052 with MQA)
-- **Rebound**: 0.045185 (vs -0.000974 with MQA)
-- **Overall Assessment**: No net improvement due to higher rebound
+- **Final Val Loss**: 1.260637 (vs 1.271026 with MQA) - **0.8% improvement**
+- **Best Val Loss**: 1.215451 (vs 1.270052 with MQA) - **4.3% improvement**
+- **Rebound**: 0.045185 (vs -0.000974 with MQA) - higher instability
+- **Overall Assessment**: Small net improvement despite higher rebound
 
 ### Strategic Impact
-RoPE implementation was successful but did not provide the expected performance improvement. The higher rebound suggests that RoPE may require different hyperparameter tuning or may not be optimal for this specific model size and dataset. The MQA + RMSNorm + Pre-LN combination remains the best performing architecture.
+RoPE implementation was successful and provided a small but measurable improvement over the MQA baseline. While the higher rebound indicates some instability, the overall performance gain (0.8% final loss improvement, 4.3% best loss improvement) demonstrates that RoPE is beneficial for this architecture. The RoPE + MQA + RMSNorm + Pre-LN combination now represents the best performing architecture with a final validation loss of **1.260637** (28.1% improvement over baseline).
