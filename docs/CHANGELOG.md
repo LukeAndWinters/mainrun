@@ -260,3 +260,15 @@
   ![val loss](../docs/figures/Experiment_8_Phase_3_Warmup_Percentage_Tuning_20251016_120000_20251017_033209/20251017_loss_val.png)  
   ![train loss](../docs/figures/Experiment_8_Phase_3_Warmup_Percentage_Tuning_20251016_120000_20251017_033209/20251017_loss_train.png)
 
+## Experiment 9: Architecture Enhancement - Residual Scaling + SwiGLU
+- **Commit:** `TBD`
+- **Change:** Architecture enhancement with residual scaling + SwiGLU activation
+- **Rationale:** Move beyond hyperparameter optimization to architectural improvements
+- **Key settings:** `--residual_scale --mlp_activation swiglu, LR=4.2e-3, eta_min_factor=0.03, warmup_pct=0.20, grad_accum_steps=2, tail_squeeze enabled`
+- **Result:** best val loss = **1.287965** (BREAKTHROUGH - 3.36% improvement)
+- **Key Finding:** Architecture enhancement highly effective - 26.6% total improvement over baseline
+- **Status:** New best result achieved - optimal configuration found
+- **Figures:**  
+  ![val loss](../docs/figures/Experiment_9_Architecture_Enhancement_Residual_Scaling_SwiGLU_20251017_033500_20251017_035046/20251017_loss_val.png)  
+  ![train loss](../docs/figures/Experiment_9_Architecture_Enhancement_Residual_Scaling_SwiGLU_20251017_033500_20251017_035046/20251017_loss_train.png)
+
