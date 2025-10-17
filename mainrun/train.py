@@ -19,7 +19,7 @@ from torch.utils.tensorboard import SummaryWriter
 class Hyperparameters:
     block_size: int = 128
     batch_size: int = 64
-    vocab_size: int = 16_000
+    vocab_size: int = 32_000  # Increase vocab size to 32k for Experiment 18 (tokenization capacity)
     n_layer: int = 6  # Revert to 6 layers (best peak perf per Exp14)
     n_head: int = 8
     d_model: int = 512  # Reverted from 768 to 512 (optimal from Experiment 15)
