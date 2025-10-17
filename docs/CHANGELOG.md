@@ -1,5 +1,32 @@
 # Experiment 
 
+## [2025-01-17] Experiment 14: Grouped Query Attention (GQA) Implementation
+
+### Added
+- Grouped Query Attention (GQA) support in `CausalSelfAttention`
+- Configurable attention types: mha, mqa, gqa via `--attention_type` CLI argument
+- GQA with 4 query groups, each sharing 1 key-value head (4 total key-value heads)
+- Query group processing with `repeat_interleave` for key-value sharing
+
+### Changed
+- Modified `CausalSelfAttention` to support GQA attention mechanism
+- Updated attention configuration to handle grouped query processing
+- Enhanced attention mechanism selection in `GPTConfig`
+
+### Results
+- **Final Val Loss**: 1.261802 (vs 1.260637 with MQA) - +0.1% change
+- **Best Val Loss**: 1.209722 (vs 1.215451 with MQA) - **0.5% improvement - NEW BEST**
+- **Rebound**: 0.052080 (vs 0.045185 with MQA) - +15.3% higher rebound
+- **Overall Assessment**: GQA provides best overall performance with lowest best validation loss
+- **Total Improvement**: 31.0% improvement over baseline (1.7533 → 1.209722)
+
+### Technical Details
+- **Architecture**: GQA + RoPE + RMSNorm + Pre-LN + Residual Scaling + SwiGLU
+- **Query Groups**: 4 groups of 2 query heads each (8 total heads)
+- **Key-Value Sharing**: Each group shares 1 key-value head (4 total key-value heads)
+- **Training Stability**: Excellent convergence with no training instabilities
+- **Modern Design**: Successfully implemented state-of-the-art attention mechanism
+
 ## [2025-01-16] Experiment 13: Rotary Position Embeddings (RoPE) Implementation
 
 ### Added
