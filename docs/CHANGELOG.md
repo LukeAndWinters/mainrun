@@ -14,13 +14,13 @@
 - Reduced late-epoch rebound by 32.1%
 
 ### Results
-- **Best Val Loss**: 1.223518 (new best validation loss)
-- **Final Val Loss**: 1.258896 (2.9% worse than best)
+- **Best Val Loss**: 1.223518 (1.1% worse than Experiment 14's 1.209722)
+- **Final Val Loss**: 1.258896 (0.2% better than Experiment 14's 1.261802)
 - **Rebound**: 0.035378 (32.1% improvement in stability)
-- **Overall**: **Success** - New best validation loss achieved
+- **Overall**: **Mixed** - Better stability but worse peak performance
 
 ### Impact
-Depth scaling proved effective where width scaling failed, establishing 8-layer GQA + RoPE + RMSNorm + Pre-LN + Residual Scaling + SwiGLU as the optimal architecture configuration.
+Depth scaling improved stability and final performance but degraded peak performance by 1.1%. The 6-layer architecture (Experiment 14) remains optimal for best validation loss, while 8-layer provides better stability at the cost of peak performance.
 
 ## [2025-01-17] Experiment 15: Model Width Scaling (d_model=768)
 

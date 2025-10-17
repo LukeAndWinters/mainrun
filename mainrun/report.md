@@ -3,9 +3,9 @@
 ## Executive Summary
 - **Goal**: Minimize validation loss within exactly 7 epochs
 - **Baseline**: 1.7533 (SGD optimizer, fixed LR)
-- **Best Result**: 1.223518 (Experiment 16 - Depth Scaling n_layer=8 + GQA + RoPE + RMSNorm + Pre-LN + Residual Scaling + SwiGLU)
-- **Improvement**: 30.2% reduction in validation loss
-- **Latest**: 1.258896 (Experiment 16 - Depth Scaling n_layer=8) - 2.9% worse than best
+- **Best Result**: 1.209722 (Experiment 14 - Grouped Query Attention + RoPE + RMSNorm + Pre-LN + Residual Scaling + SwiGLU)
+- **Improvement**: 31.0% reduction in validation loss
+- **Latest**: 1.223518 (Experiment 16 - Depth Scaling n_layer=8) - 1.1% worse than best
 - **Status**: GQA implementation completed - significant improvement over MQA baseline
 - **Breakthrough**: Grouped Query Attention achieved 4.8% improvement over MQA
 - **Architecture**: Modern transformer with GQA, RoPE, RMSNorm, Pre-LN, residual scaling, and SwiGLU
@@ -1702,17 +1702,17 @@ GQA represents a significant architectural improvement, achieving the best valid
 | **Stability** | Good | **Excellent** | **Better** |
 
 ### Key Findings
-1. **New Best Performance**: Achieved best validation loss of 1.223518
+1. **Performance Degradation**: Best validation loss 1.223518 (1.1% worse than n_layer=6)
 2. **Improved Stability**: Significantly reduced rebound (32.1% improvement)
 3. **Better Final Performance**: Slightly better final validation loss
-4. **Architecture Success**: Depth scaling proved effective
+4. **Architecture Trade-off**: Depth scaling improved stability but hurt peak performance
 5. **Stable Training**: Excellent training stability throughout
 
 ### Results Summary
-- **Final Val Loss**: 1.258896 (vs 1.261802 with n_layer=6)
-- **Best Val Loss**: 1.223518 (vs 1.209722 with n_layer=6)
-- **Rebound**: 0.035378 (vs 0.052080 with n_layer=6)
-- **Overall Assessment**: **Success** - New best validation loss achieved
+- **Final Val Loss**: 1.258896 (vs 1.261802 with n_layer=6) - **Better**
+- **Best Val Loss**: 1.223518 (vs 1.209722 with n_layer=6) - **Worse**
+- **Rebound**: 0.035378 (vs 0.052080 with n_layer=6) - **Better**
+- **Overall Assessment**: **Mixed** - Better stability but worse peak performance
 
 ### Strategic Impact
-Depth scaling (n_layer=8) achieved a new best validation loss of **1.223518**, establishing the optimal architecture as 8-layer GQA + RoPE + RMSNorm + Pre-LN + Residual Scaling + SwiGLU. The improved stability and reduced rebound make this the most robust configuration yet.
+Depth scaling (n_layer=8) improved stability and final performance but **degraded peak performance** by 1.1%. The 6-layer architecture (Experiment 14) remains optimal for best validation loss, while 8-layer provides better stability at the cost of peak performance.
