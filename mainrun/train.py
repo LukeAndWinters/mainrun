@@ -22,7 +22,7 @@ class Hyperparameters:
     vocab_size: int = 16_000
     n_layer: int = 6
     n_head: int = 8
-    d_model: int = 512
+    d_model: int = 768
     dropout: float = 0.1
     lr: float = 6e-3
     weight_decay: float = 0.0

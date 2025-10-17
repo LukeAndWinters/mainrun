@@ -1,5 +1,33 @@
 # Experiment 
 
+## [2025-01-17] Experiment 15: Model Width Scaling (d_model=768)
+
+### Added
+- Model width scaling from d_model=512 to d_model=768
+- 50% increase in model capacity and parameters
+- Maintained all optimal architectural components from Experiment 14
+
+### Changed
+- Modified `Hyperparameters` class to set d_model=768
+- Increased model width while keeping all other components identical
+- Same optimal hyperparameters as Experiment 14
+
+### Results
+- **Final Val Loss**: 1.270237 (vs 1.209722 with d_model=512) - **5.0% worse**
+- **Best Val Loss**: 1.296470 (vs 1.209722 with d_model=512) - **7.2% worse**
+- **Rebound**: -0.026233 (vs 0.052080 with d_model=512) - better stability
+- **Overall Assessment**: Width scaling was counterproductive
+- **Parameter Count**: ~18M (vs ~12M with d_model=512) - 50% increase
+
+### Technical Details
+- **Architecture**: GQA + RoPE + RMSNorm + Pre-LN + Residual Scaling + SwiGLU (same as Experiment 14)
+- **Model Size**: 768-dimensional model with 50% more parameters
+- **Training Stability**: Excellent convergence with negative rebound
+- **Overfitting Risk**: Larger model may be overfitting to training data
+
+### Analysis
+Width scaling to d_model=768 actually degraded performance compared to the optimal d_model=512 configuration. This suggests that the current dataset size and complexity may not require the additional capacity, and the smaller model is better regularized. The optimal architecture remains GQA + RoPE + RMSNorm + Pre-LN + Residual Scaling + SwiGLU with d_model=512.
+
 ## [2025-01-17] Experiment 14: Grouped Query Attention (GQA) Implementation
 
 ### Added

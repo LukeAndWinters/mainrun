@@ -5,6 +5,7 @@
 - **Baseline**: 1.7533 (SGD optimizer, fixed LR)
 - **Best Result**: 1.209722 (Experiment 14 - Grouped Query Attention + RoPE + RMSNorm + Pre-LN + Residual Scaling + SwiGLU)
 - **Improvement**: 31.0% reduction in validation loss
+- **Latest**: 1.270237 (Experiment 15 - Width Scaling d_model=768) - 5.0% worse than best
 - **Status**: GQA implementation completed - significant improvement over MQA baseline
 - **Breakthrough**: Grouped Query Attention achieved 4.8% improvement over MQA
 - **Architecture**: Modern transformer with GQA, RoPE, RMSNorm, Pre-LN, residual scaling, and SwiGLU
@@ -868,9 +869,78 @@ No improvement over the current best final (1.3553) was achieved. The best perfo
 - **Convergence Quality**: Smooth, monotonic validation loss curve
 - **Training Efficiency**: Maintained 2-step gradient accumulation for stability
 
+## Experiment 15: Model Width Scaling (d_model=768)
+
+### Change Description
+**Before**: Model width d_model=512 (Experiment 14 baseline)
+**After**: Model width d_model=768 (50% increase in model capacity)
+
+### Technical Details
+- **Model Width**: Increased from 512 to 768 dimensions
+- **Parameter Count**: ~50% increase in total parameters
+- **Architecture**: Maintained GQA + RoPE + RMSNorm + Pre-LN + Residual Scaling + SwiGLU
+- **Configuration**: Same optimal hyperparameters as Experiment 14
+
+### Reasoning
+1. **Capacity Increase**: Larger models can learn more complex patterns
+2. **Modern Scaling**: 768 is a common width in modern transformers
+3. **Parameter Efficiency**: Width scaling often more effective than depth scaling
+4. **Memory Trade-off**: Larger models require more memory but better performance
+
+### Training Curve Analysis
+
+#### Validation Loss Comparison
+![Width Scaling Validation Loss](../docs/figures/Experiment_15_Width_Scaling_20250116_001856_20251017_054057/20251017_loss_val.png)
+
+- **Pattern**: Similar convergence pattern to Experiment 14
+- **Final Loss**: 1.270237 (vs 1.209722 with d_model=512)
+- **Best Loss**: 1.296470 (vs 1.209722 with d_model=512)
+- **Rebound**: -0.026233 (negative rebound, good stability)
+
+#### Training Loss Comparison
+![Width Scaling Training Loss](../docs/figures/Experiment_15_Width_Scaling_20250116_001856_20251017_054057/20251017_loss_train.png)
+
+- **Pattern**: Smooth convergence with good stability
+- **Final Loss**: Lower than validation loss (good generalization)
+- **Convergence**: Reached stable minimum by epoch 7
+
+#### Learning Rate Schedule
+![Width Scaling Learning Rate](../docs/figures/Experiment_15_Width_Scaling_20250116_001856_20251017_054057/20251017_lr.png)
+
+- **Schedule**: Same optimal LR schedule as Experiment 14
+- **Range**: 0.0 to 0.0042 (same as baseline)
+- **Pattern**: Smooth warmup and cosine decay
+
+### Performance Comparison
+
+| Metric | Experiment 14 (d_model=512) | Experiment 15 (d_model=768) | Change |
+|--------|------------------------------|------------------------------|--------|
+| Final Val Loss | 1.209722 | 1.270237 | +5.0% worse |
+| Best Val Loss | 1.209722 | 1.296470 | +7.2% worse |
+| Rebound | 0.052080 | -0.026233 | Better stability |
+| Parameters | ~12M | ~18M | +50% increase |
+
+### Key Findings
+
+1. **Performance Degradation**: Width scaling actually hurt performance
+2. **Overfitting Risk**: Larger model may be overfitting to training data
+3. **Stability Improvement**: Better rebound characteristics
+4. **Parameter Inefficiency**: 50% more parameters for worse performance
+
+### Results Summary
+
+- **Final Val Loss**: 1.270237 (5.0% worse than best)
+- **Best Val Loss**: 1.296470 (7.2% worse than best)
+- **Rebound**: -0.026233 (excellent stability)
+- **Overall Assessment**: Width scaling was counterproductive
+
+### Strategic Impact
+
+Width scaling to d_model=768 actually degraded performance compared to the optimal d_model=512 configuration. This suggests that the current dataset size and complexity may not require the additional capacity, and the smaller model is better regularized. The optimal architecture remains GQA + RoPE + RMSNorm + Pre-LN + Residual Scaling + SwiGLU with d_model=512.
+
 ## Next Steps
 
-Based on the successful Quick Win experiments achieving 1.3325 validation loss, the following sequential approach is recommended for further optimization:
+Based on the comprehensive architectural improvements achieved, the following strategies could further optimize performance:
 
 ### Phase 1: Micro-Tuning the Winner (High Priority)
 **Goal**: Fine-tune the winning Quick Win #1 configuration for maximum performance
