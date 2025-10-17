@@ -227,6 +227,7 @@ class GPTConfig:
     mlp_activation: str = "gelu"  # "gelu" | "swiglu"
     pre_ln: bool = False  # Pre-LN vs Post-LN architecture
     norm_type: str = "layernorm"  # "layernorm" | "rmsnorm"
+    attention_type: str = "mha"  # "mha" | "mqa" | "gqa"
 
 class RMSNorm(nn.Module):
     """Root Mean Square Layer Normalization"""
@@ -255,7 +256,27 @@ class CausalSelfAttention(nn.Module):
         assert cfg.d_model % cfg.n_head == 0
         self.head_dim = cfg.d_model // cfg.n_head
         self.n_head   = cfg.n_head
-        self.qkv = nn.Linear(cfg.d_model, 3 * cfg.d_model)
+        self.attention_type = cfg.attention_type
+        
+        # WHAT: Support different attention mechanisms (MHA, MQA, GQA)
+        # WHY: MQA reduces memory usage and can improve performance
+        # IMPACT: Enables modern attention patterns used in LLaMA, PaLM
+        
+        if cfg.attention_type == "mqa":
+            # Multi-Query Attention: single key/value head, multiple query heads
+            self.q = nn.Linear(cfg.d_model, cfg.d_model)  # n_head * head_dim
+            self.k = nn.Linear(cfg.d_model, self.head_dim)  # 1 * head_dim
+            self.v = nn.Linear(cfg.d_model, self.head_dim)  # 1 * head_dim
+        elif cfg.attention_type == "gqa":
+            # Grouped Query Attention: fewer key/value heads than query heads
+            n_kv_heads = max(1, cfg.n_head // 4)  # 4:1 ratio like LLaMA-2
+            self.n_kv_heads = n_kv_heads
+            self.q = nn.Linear(cfg.d_model, cfg.d_model)
+            self.k = nn.Linear(cfg.d_model, n_kv_heads * self.head_dim)
+            self.v = nn.Linear(cfg.d_model, n_kv_heads * self.head_dim)
+        else:  # mha - Multi-Head Attention (original)
+            self.qkv = nn.Linear(cfg.d_model, 3 * cfg.d_model)
+            
         self.proj = nn.Linear(cfg.d_model, cfg.d_model)
         self.attn_drop = nn.Dropout(cfg.dropout)
         self.resid_drop= nn.Dropout(cfg.dropout)
@@ -263,8 +284,33 @@ class CausalSelfAttention(nn.Module):
 
     def forward(self, x: torch.Tensor):
         B, T, C = x.size()
-        qkv = self.qkv(x).view(B, T, 3, self.n_head, self.head_dim).transpose(1, 3)
-        q, k, v = qkv[..., 0, :, :], qkv[..., 1, :, :], qkv[..., 2, :, :]
+        
+        if self.attention_type == "mqa":
+            # Multi-Query Attention
+            q = self.q(x).view(B, T, self.n_head, self.head_dim).transpose(1, 2)
+            k = self.k(x).view(B, T, 1, self.head_dim).transpose(1, 2)
+            v = self.v(x).view(B, T, 1, self.head_dim).transpose(1, 2)
+            
+            # Repeat k, v for all query heads
+            k = k.repeat_interleave(self.n_head, dim=1)
+            v = v.repeat_interleave(self.n_head, dim=1)
+            
+        elif self.attention_type == "gqa":
+            # Grouped Query Attention
+            q = self.q(x).view(B, T, self.n_head, self.head_dim).transpose(1, 2)
+            k = self.k(x).view(B, T, self.n_kv_heads, self.head_dim).transpose(1, 2)
+            v = self.v(x).view(B, T, self.n_kv_heads, self.head_dim).transpose(1, 2)
+            
+            # Repeat k, v for grouped query heads
+            repeat_factor = self.n_head // self.n_kv_heads
+            k = k.repeat_interleave(repeat_factor, dim=1)
+            v = v.repeat_interleave(repeat_factor, dim=1)
+            
+        else:  # mha - Multi-Head Attention (original)
+            qkv = self.qkv(x).view(B, T, 3, self.n_head, self.head_dim).transpose(1, 3)
+            q, k, v = qkv[..., 0, :, :], qkv[..., 1, :, :], qkv[..., 2, :, :]
+        
+        # Attention computation (same for all types)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
         att = att.masked_fill(self.tril[:T, :T] == 0, float("-inf"))
         att = F.softmax(att, dim=-1)
@@ -386,6 +432,7 @@ def main():
     parser.add_argument('--mlp_activation', type=str, default='gelu', choices=['gelu','swiglu'], help='MLP activation')
     parser.add_argument('--pre_ln', action='store_true', help='Use Pre-LN architecture (normalize before attention/MLP)')
     parser.add_argument('--norm_type', type=str, default='layernorm', choices=['layernorm','rmsnorm'], help='Normalization type')
+    parser.add_argument('--attention_type', type=str, default='mha', choices=['mha','mqa','gqa'], help='Attention mechanism type')
     parser.add_argument('--pack_tokens', action='store_true', help='Enable dynamic token packing (placeholder, no-op)')
     parser.add_argument('--dropout', type=float, default=None, help='Override dropout if provided')
     parser.add_argument('--weight_decay', type=float, default=None, help='Override weight decay if provided')
@@ -457,6 +504,7 @@ def main():
         mlp_activation = cli_args.mlp_activation,
         pre_ln = bool(cli_args.pre_ln),
         norm_type = cli_args.norm_type,
+        attention_type = cli_args.attention_type,
     )
     model = GPT(cfg).to(device)
     model_params = sum(p.numel() for p in model.parameters() if p.requires_grad)

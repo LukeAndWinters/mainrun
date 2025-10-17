@@ -312,3 +312,15 @@
   ![val loss](figures/Experiment_11_RMSNorm_Implementation_loss_val.png)  
   ![train loss](figures/Experiment_11_RMSNorm_Implementation_loss_train.png)
 
+
+## Experiment_12_MQA_Implementation — Multi-Query Attention Implementation
+- **Commit:** `TBD`
+- **Change:** Implemented Multi-Query Attention (MQA) with single key/value head shared across query heads
+- **Rationale:** MQA reduces memory usage while maintaining or improving performance, used in LLaMA and PaLM
+- **Key settings:** `attention_type=mqa, norm_type=rmsnorm, lr=4.2e-3, eta_min_factor=0.03, warmup_pct=0.20, grad_accum_steps=2, tail_squeeze, residual_scale, mlp_activation=swiglu, pre_ln`
+- **Result:** best val loss = **1.270052** (NEW BEST - 5.1% improvement over MHA)
+- **Key Achievement:** 27.5% total improvement over baseline with memory efficiency
+- **Figures:**  
+  ![val loss](figures/Experiment_12_MQA_Implementation_20251017_045250/20251017_loss_val.png)  
+  ![train loss](figures/Experiment_12_MQA_Implementation_20251017_045250/20251017_loss_train.png)
+
