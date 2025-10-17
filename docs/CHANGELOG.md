@@ -290,3 +290,25 @@
 - **Impact:** Improved report quality and assessment documentation with visual evidence
 - **Figures:** Enhanced report with validation loss, training loss, learning rate, performance, and perplexity plots
 
+
+## exp — iteration
+- **Commit:** `67f5de5`
+- **Change:** n/a
+- **Rationale:** n/a
+- **Key settings:** ``
+- **Result:** best val loss = **0.0000**
+- **Figures:**  
+  ![val loss](figures/exp_loss_val.png)  
+  ![train loss](figures/exp_loss_train.png)
+
+
+## Experiment_11_RMSNorm_Implementation — RMSNorm Architecture Implementation
+- **Commit:** `67f5de5`
+- **Change:** Replaced LayerNorm with RMSNorm throughout the model
+- **Rationale:** RMSNorm provides better training stability and is used in modern transformers like LLaMA and PaLM
+- **Key settings:** `norm_type=rmsnorm, lr=4.2e-3, eta_min_factor=0.03, warmup_pct=0.20, grad_accum_steps=2, tail_squeeze, residual_scale, mlp_activation=swiglu, pre_ln`
+- **Result:** best val loss = **1.3396**
+- **Figures:**  
+  ![val loss](figures/Experiment_11_RMSNorm_Implementation_loss_val.png)  
+  ![train loss](figures/Experiment_11_RMSNorm_Implementation_loss_train.png)
+

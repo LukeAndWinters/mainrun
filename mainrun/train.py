@@ -226,6 +226,28 @@ class GPTConfig:
     residual_scale: bool = False
     mlp_activation: str = "gelu"  # "gelu" | "swiglu"
     pre_ln: bool = False  # Pre-LN vs Post-LN architecture
+    norm_type: str = "layernorm"  # "layernorm" | "rmsnorm"
+
+class RMSNorm(nn.Module):
+    """Root Mean Square Layer Normalization"""
+    def __init__(self, d_model: int, eps: float = 1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(d_model))
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # WHAT: RMSNorm normalizes by root mean square instead of mean and variance
+        # WHY: More stable than LayerNorm, used in modern transformers (LLaMA, PaLM)
+        # IMPACT: Better gradient flow and training stability
+        norm = x.norm(dim=-1, keepdim=True) * (x.shape[-1] ** -0.5)
+        return x / (norm + self.eps) * self.weight
+
+def create_norm_layer(cfg: GPTConfig, d_model: int) -> nn.Module:
+    """Create normalization layer based on config"""
+    if cfg.norm_type == "rmsnorm":
+        return RMSNorm(d_model)
+    else:  # layernorm
+        return nn.LayerNorm(d_model)
 
 class CausalSelfAttention(nn.Module):
     def __init__(self, cfg: GPTConfig):
@@ -277,8 +299,11 @@ class MLP(nn.Module):
 class Block(nn.Module):
     def __init__(self, cfg: GPTConfig):
         super().__init__()
-        self.ln1 = nn.LayerNorm(cfg.d_model)
-        self.ln2 = nn.LayerNorm(cfg.d_model)
+        # WHAT: Use configurable normalization (LayerNorm or RMSNorm)
+        # WHY: RMSNorm often provides better training stability and performance
+        # IMPACT: Enables modern normalization techniques used in LLaMA, PaLM
+        self.ln1 = create_norm_layer(cfg, cfg.d_model)
+        self.ln2 = create_norm_layer(cfg, cfg.d_model)
         self.attn = CausalSelfAttention(cfg)
         self.mlp  = MLP(cfg)
         self.use_residual_scale = cfg.residual_scale
@@ -314,7 +339,10 @@ class GPT(nn.Module):
         self.pos_emb   = nn.Parameter(torch.zeros(1, cfg.block_size, cfg.d_model))
         self.drop      = nn.Dropout(cfg.dropout)
         self.blocks    = nn.ModuleList([Block(cfg) for _ in range(cfg.n_layer)])
-        self.ln_f      = nn.LayerNorm(cfg.d_model)
+        # WHAT: Use configurable normalization for final layer norm
+        # WHY: Consistent normalization throughout the model
+        # IMPACT: Enables RMSNorm for the final normalization layer
+        self.ln_f      = create_norm_layer(cfg, cfg.d_model)
         self.head      = nn.Linear(cfg.d_model, cfg.vocab_size, bias=False)
 
         self.apply(self._init_weights)
@@ -357,6 +385,7 @@ def main():
     parser.add_argument('--residual_scale', action='store_true', help='Enable residual scaling (LayerScale-style)')
     parser.add_argument('--mlp_activation', type=str, default='gelu', choices=['gelu','swiglu'], help='MLP activation')
     parser.add_argument('--pre_ln', action='store_true', help='Use Pre-LN architecture (normalize before attention/MLP)')
+    parser.add_argument('--norm_type', type=str, default='layernorm', choices=['layernorm','rmsnorm'], help='Normalization type')
     parser.add_argument('--pack_tokens', action='store_true', help='Enable dynamic token packing (placeholder, no-op)')
     parser.add_argument('--dropout', type=float, default=None, help='Override dropout if provided')
     parser.add_argument('--weight_decay', type=float, default=None, help='Override weight decay if provided')
@@ -427,6 +456,7 @@ def main():
         residual_scale = bool(cli_args.residual_scale),
         mlp_activation = cli_args.mlp_activation,
         pre_ln = bool(cli_args.pre_ln),
+        norm_type = cli_args.norm_type,
     )
     model = GPT(cfg).to(device)
     model_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
