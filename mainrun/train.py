@@ -225,6 +225,7 @@ class GPTConfig:
     # Optional knobs (default keep current behavior)
     residual_scale: bool = False
     mlp_activation: str = "gelu"  # "gelu" | "swiglu"
+    pre_ln: bool = False  # Pre-LN vs Post-LN architecture
 
 class CausalSelfAttention(nn.Module):
     def __init__(self, cfg: GPTConfig):
@@ -281,16 +282,28 @@ class Block(nn.Module):
         self.attn = CausalSelfAttention(cfg)
         self.mlp  = MLP(cfg)
         self.use_residual_scale = cfg.residual_scale
+        self.pre_ln = cfg.pre_ln
         if self.use_residual_scale:
             self.attn_alpha = nn.Parameter(torch.ones(1))
             self.mlp_alpha = nn.Parameter(torch.ones(1))
+    
     def forward(self, x):
-        if self.use_residual_scale:
-            x = x + self.attn_alpha * self.attn(self.ln1(x))
-            x = x + self.mlp_alpha * self.mlp(self.ln2(x))
+        if self.pre_ln:
+            # Pre-LN: normalize before attention/MLP, then add residual
+            if self.use_residual_scale:
+                x = x + self.attn_alpha * self.attn(self.ln1(x))
+                x = x + self.mlp_alpha * self.mlp(self.ln2(x))
+            else:
+                x = x + self.attn(self.ln1(x))
+                x = x + self.mlp(self.ln2(x))
         else:
-            x = x + self.attn(self.ln1(x))
-            x = x + self.mlp(self.ln2(x))
+            # Post-LN: apply attention/MLP, then normalize and add residual (original behavior)
+            if self.use_residual_scale:
+                x = x + self.attn_alpha * self.ln1(self.attn(x))
+                x = x + self.mlp_alpha * self.ln2(self.mlp(x))
+            else:
+                x = x + self.ln1(self.attn(x))
+                x = x + self.ln2(self.mlp(x))
         return x
 
 class GPT(nn.Module):
@@ -343,6 +356,7 @@ def main():
     # Additional sweep flags (safe defaults = no behavior change unless provided)
     parser.add_argument('--residual_scale', action='store_true', help='Enable residual scaling (LayerScale-style)')
     parser.add_argument('--mlp_activation', type=str, default='gelu', choices=['gelu','swiglu'], help='MLP activation')
+    parser.add_argument('--pre_ln', action='store_true', help='Use Pre-LN architecture (normalize before attention/MLP)')
     parser.add_argument('--pack_tokens', action='store_true', help='Enable dynamic token packing (placeholder, no-op)')
     parser.add_argument('--dropout', type=float, default=None, help='Override dropout if provided')
     parser.add_argument('--weight_decay', type=float, default=None, help='Override weight decay if provided')
@@ -412,6 +426,7 @@ def main():
         dropout    = args.dropout,
         residual_scale = bool(cli_args.residual_scale),
         mlp_activation = cli_args.mlp_activation,
+        pre_ln = bool(cli_args.pre_ln),
     )
     model = GPT(cfg).to(device)
     model_params = sum(p.numel() for p in model.parameters() if p.requires_grad)

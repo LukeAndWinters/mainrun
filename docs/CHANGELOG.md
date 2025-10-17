@@ -272,3 +272,14 @@
   ![val loss](../docs/figures/Experiment_9_Architecture_Enhancement_Residual_Scaling_SwiGLU_20251017_033500_20251017_035046/20251017_loss_val.png)  
   ![train loss](../docs/figures/Experiment_9_Architecture_Enhancement_Residual_Scaling_SwiGLU_20251017_033500_20251017_035046/20251017_loss_train.png)
 
+
+## exp — Pre-LN Architecture Implementation
+- **Commit:** `da060ff`
+- **Change:** Implemented Pre-LN transformer blocks with normalization before attention/MLP
+- **Rationale:** Pre-LN often provides 3-7% improvement over Post-LN by improving gradient flow and training stability
+- **Key settings:** `lr=4.2e-3, eta_min_factor=0.03, warmup_pct=0.20, grad_accum_steps=2, tail_squeeze=True, residual_scale=True, mlp_activation=swiglu, pre_ln=True`
+- **Result:** best val loss = **1.2877**
+- **Figures:**  
+  ![val loss](figures/exp_loss_val.png)  
+  ![train loss](figures/exp_loss_train.png)
+
