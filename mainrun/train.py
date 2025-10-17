@@ -228,6 +228,7 @@ class GPTConfig:
     pre_ln: bool = False  # Pre-LN vs Post-LN architecture
     norm_type: str = "layernorm"  # "layernorm" | "rmsnorm"
     attention_type: str = "mha"  # "mha" | "mqa" | "gqa"
+    pos_encoding: str = "learned"  # "learned" | "rope"
 
 class RMSNorm(nn.Module):
     """Root Mean Square Layer Normalization"""
@@ -250,6 +251,50 @@ def create_norm_layer(cfg: GPTConfig, d_model: int) -> nn.Module:
     else:  # layernorm
         return nn.LayerNorm(d_model)
 
+class RoPE(nn.Module):
+    """Rotary Position Embeddings (RoPE)
+    
+    WHAT: Applies rotary position embeddings to query and key vectors
+    WHY: More effective than learned positional embeddings, used in LLaMA, PaLM
+    IMPACT: Better position encoding, improved performance, better extrapolation
+    """
+    def __init__(self, head_dim: int, max_seq_len: int = 2048, base: float = 10000.0):
+        super().__init__()
+        self.head_dim = head_dim
+        self.max_seq_len = max_seq_len
+        self.base = base
+        
+        # Pre-compute frequency matrix for head_dim
+        inv_freq = 1.0 / (base ** (torch.arange(0, head_dim, 2).float() / head_dim))
+        self.register_buffer('inv_freq', inv_freq)
+        
+    def forward(self, x: torch.Tensor, seq_len: int) -> torch.Tensor:
+        # WHAT: Apply rotary position embeddings to input tensor
+        # WHY: Encodes position information directly into the attention mechanism
+        # IMPACT: Better position awareness, improved performance on longer sequences
+        
+        # x shape: (batch, n_heads, seq_len, head_dim)
+        # We need to apply RoPE to the last dimension (head_dim)
+        
+        # Create position indices
+        t = torch.arange(seq_len, device=x.device, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(t, self.inv_freq)
+        
+        # Create rotation matrix
+        cos = torch.cos(freqs)
+        sin = torch.sin(freqs)
+        
+        # Apply rotation to even and odd dimensions of head_dim
+        x_even = x[..., ::2]  # (batch, n_heads, seq_len, head_dim//2)
+        x_odd = x[..., 1::2]  # (batch, n_heads, seq_len, head_dim//2)
+        
+        # Rotate
+        x_rotated = torch.zeros_like(x)
+        x_rotated[..., ::2] = x_even * cos - x_odd * sin
+        x_rotated[..., 1::2] = x_even * sin + x_odd * cos
+        
+        return x_rotated
+
 class CausalSelfAttention(nn.Module):
     def __init__(self, cfg: GPTConfig):
         super().__init__()
@@ -257,10 +302,19 @@ class CausalSelfAttention(nn.Module):
         self.head_dim = cfg.d_model // cfg.n_head
         self.n_head   = cfg.n_head
         self.attention_type = cfg.attention_type
+        self.pos_encoding = cfg.pos_encoding
         
         # WHAT: Support different attention mechanisms (MHA, MQA, GQA)
         # WHY: MQA reduces memory usage and can improve performance
         # IMPACT: Enables modern attention patterns used in LLaMA, PaLM
+        
+        # WHAT: Initialize RoPE for position encoding
+        # WHY: RoPE provides better position encoding than learned embeddings
+        # IMPACT: Improved performance and better extrapolation to longer sequences
+        if self.pos_encoding == "rope":
+            self.rope = RoPE(self.head_dim, cfg.block_size)
+        else:
+            self.rope = None
         
         if cfg.attention_type == "mqa":
             # Multi-Query Attention: single key/value head, multiple query heads
@@ -309,6 +363,14 @@ class CausalSelfAttention(nn.Module):
         else:  # mha - Multi-Head Attention (original)
             qkv = self.qkv(x).view(B, T, 3, self.n_head, self.head_dim).transpose(1, 3)
             q, k, v = qkv[..., 0, :, :], qkv[..., 1, :, :], qkv[..., 2, :, :]
+        
+        # WHAT: Apply RoPE to query and key vectors if enabled
+        # WHY: RoPE provides better position encoding than learned embeddings
+        # IMPACT: Improved position awareness and performance
+        if self.rope is not None:
+            # Apply RoPE to query and key vectors
+            q = self.rope(q, T)
+            k = self.rope(k, T)
         
         # Attention computation (same for all types)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
@@ -382,7 +444,15 @@ class GPT(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.token_emb = nn.Embedding(cfg.vocab_size, cfg.d_model)
-        self.pos_emb   = nn.Parameter(torch.zeros(1, cfg.block_size, cfg.d_model))
+        
+        # WHAT: Conditional positional encoding based on config
+        # WHY: RoPE is more effective than learned positional embeddings
+        # IMPACT: Better position encoding, improved performance
+        if cfg.pos_encoding == "rope":
+            self.pos_emb = None  # RoPE is applied in attention layers
+        else:
+            self.pos_emb = nn.Parameter(torch.zeros(1, cfg.block_size, cfg.d_model))
+            
         self.drop      = nn.Dropout(cfg.dropout)
         self.blocks    = nn.ModuleList([Block(cfg) for _ in range(cfg.n_layer)])
         # WHAT: Use configurable normalization for final layer norm
@@ -404,8 +474,16 @@ class GPT(nn.Module):
     def forward(self, idx: torch.Tensor, targets: torch.Tensor | None = None):
         B, T = idx.size()
         tok = self.token_emb(idx)
-        pos = self.pos_emb[:, :T, :]
-        x = self.drop(tok + pos)
+        
+        # WHAT: Apply positional encoding based on config
+        # WHY: RoPE is applied in attention layers, learned embeddings are added here
+        # IMPACT: Proper position encoding for the model
+        if self.pos_emb is not None:
+            pos = self.pos_emb[:, :T, :]
+            x = self.drop(tok + pos)
+        else:
+            x = self.drop(tok)  # RoPE will be applied in attention layers
+            
         for block in self.blocks: x = block(x)
         x = self.ln_f(x)
         logits = self.head(x)
@@ -433,6 +511,7 @@ def main():
     parser.add_argument('--pre_ln', action='store_true', help='Use Pre-LN architecture (normalize before attention/MLP)')
     parser.add_argument('--norm_type', type=str, default='layernorm', choices=['layernorm','rmsnorm'], help='Normalization type')
     parser.add_argument('--attention_type', type=str, default='mha', choices=['mha','mqa','gqa'], help='Attention mechanism type')
+    parser.add_argument('--pos_encoding', type=str, default='learned', choices=['learned','rope'], help='Position encoding type')
     parser.add_argument('--pack_tokens', action='store_true', help='Enable dynamic token packing (placeholder, no-op)')
     parser.add_argument('--dropout', type=float, default=None, help='Override dropout if provided')
     parser.add_argument('--weight_decay', type=float, default=None, help='Override weight decay if provided')
@@ -505,6 +584,7 @@ def main():
         pre_ln = bool(cli_args.pre_ln),
         norm_type = cli_args.norm_type,
         attention_type = cli_args.attention_type,
+        pos_encoding = cli_args.pos_encoding,
     )
     model = GPT(cfg).to(device)
     model_params = sum(p.numel() for p in model.parameters() if p.requires_grad)

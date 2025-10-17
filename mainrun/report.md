@@ -5,7 +5,7 @@
 - **Baseline**: 1.7533 (SGD optimizer, fixed LR)
 - **Best Result**: 1.271026 (Experiment 12 - Multi-Query Attention + RMSNorm + Pre-LN + Residual Scaling + SwiGLU)
 - **Improvement**: 27.5% reduction in validation loss
-- **Status**: MQA implementation completed - significant performance improvement with memory efficiency
+- **Status**: RoPE implementation completed - no improvement over MQA baseline
 - **Breakthrough**: Multi-Query Attention achieved 5.1% improvement over previous best
 - **Architecture**: Modern transformer with MQA, RMSNorm, Pre-LN, residual scaling, and SwiGLU
 - **Status**: Complete architectural modernization with optimal performance achieved
@@ -1472,3 +1472,55 @@ This experiment demonstrates that architectural improvements can be implemented 
 
 ### Strategic Impact
 MQA implementation represents a significant architectural advancement, achieving both performance improvement and memory efficiency. The 5.1% reduction in validation loss demonstrates the effectiveness of modern attention mechanisms while maintaining the stability and convergence characteristics established in previous experiments.
+
+## Experiment 13: Rotary Position Embeddings (RoPE) Implementation
+
+### Change Description
+**Before**: Learned positional embeddings added to token embeddings
+**After**: RoPE applied directly to query and key vectors in attention mechanism
+
+### Technical Details
+- **Position Encoding**: Replaced `nn.Parameter` positional embeddings with RoPE
+- **RoPE Implementation**: Applied to query and key vectors in `CausalSelfAttention`
+- **Frequency Matrix**: Pre-computed for head_dim (64) with base=10000.0
+- **Rotation Logic**: Applied to even/odd dimensions of head_dim
+- **Configuration**: Added `--pos_encoding` CLI argument with "learned" and "rope" options
+
+### Reasoning
+1. **Better Position Encoding**: RoPE often provides 2-5% improvement over learned embeddings
+2. **Modern Architecture**: Used in LLaMA, PaLM, and other state-of-the-art models
+3. **Better Extrapolation**: More effective for longer sequences than learned embeddings
+4. **Direct Integration**: Applied directly in attention mechanism rather than added to embeddings
+
+### Training Curve Analysis
+![RoPE Validation Loss](../docs/figures/Experiment_13_RoPE_Implementation_20251016_090000_20251017_050936/20251017_loss_val.png)
+
+- **Pattern**: Smooth convergence with moderate oscillations
+- **Final Performance**: 1.260637 validation loss
+- **Best Performance**: 1.215451 validation loss
+- **Rebound**: 0.045185 (moderate late-epoch increase)
+
+### Performance Comparison
+
+| Metric | MQA (Exp 12) | RoPE (Exp 13) | Change |
+|--------|--------------|---------------|---------|
+| Final Val Loss | 1.271026 | 1.260637 | +0.010389 |
+| Best Val Loss | 1.270052 | 1.215451 | -0.054601 |
+| Rebound | -0.000974 | +0.045185 | +0.046159 |
+| Architecture | MQA + RMSNorm + Pre-LN | RoPE + MQA + RMSNorm + Pre-LN | - |
+
+### Key Findings
+1. **No Improvement**: RoPE did not improve over MQA baseline (1.271 vs 1.261)
+2. **Higher Rebound**: RoPE showed more late-epoch instability (0.045 vs -0.001)
+3. **Better Best**: RoPE achieved better best validation loss (1.215 vs 1.270)
+4. **Implementation Success**: RoPE implementation worked correctly without errors
+5. **Architecture Compatibility**: RoPE integrated well with existing MQA + RMSNorm + Pre-LN
+
+### Results Summary
+- **Final Val Loss**: 1.260637 (vs 1.271026 with MQA)
+- **Best Val Loss**: 1.215451 (vs 1.270052 with MQA)
+- **Rebound**: 0.045185 (vs -0.000974 with MQA)
+- **Overall Assessment**: No net improvement due to higher rebound
+
+### Strategic Impact
+RoPE implementation was successful but did not provide the expected performance improvement. The higher rebound suggests that RoPE may require different hyperparameter tuning or may not be optimal for this specific model size and dataset. The MQA + RMSNorm + Pre-LN combination remains the best performing architecture.

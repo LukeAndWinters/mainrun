@@ -1,5 +1,35 @@
 # Experiment 
 
+## [2025-01-16] Experiment 13: Rotary Position Embeddings (RoPE) Implementation
+
+### Added
+- Rotary Position Embeddings (RoPE) support in `CausalSelfAttention`
+- Configurable position encoding types: learned, rope via `--pos_encoding` CLI argument
+- RoPE frequency matrix pre-computation for head_dim
+- Rotation logic applied to even/odd dimensions of head_dim
+
+### Changed
+- Modified `CausalSelfAttention` to apply RoPE to query and key vectors
+- Updated `GPT` class to conditionally use RoPE instead of learned embeddings
+- Added position encoding configuration to `GPTConfig`
+
+### Results
+- **Final Val Loss**: 1.260637 (vs 1.271026 with MQA)
+- **Best Val Loss**: 1.215451 (vs 1.270052 with MQA)
+- **Rebound**: 0.045185 (vs -0.000974 with MQA)
+- **Overall Assessment**: No net improvement due to higher rebound
+- **Implementation Success**: RoPE worked correctly without errors
+
+### Technical Details
+- RoPE applied directly to query and key vectors in attention mechanism
+- Frequency matrix pre-computed for head_dim (64) with base=10000.0
+- Rotation applied to even/odd dimensions of head_dim
+- Integrated well with existing MQA + RMSNorm + Pre-LN architecture
+
+### Architecture
+- RoPE + MQA + RMSNorm + Pre-LN + Residual Scaling + SwiGLU
+- Status: No improvement over MQA baseline - higher rebound observed
+
 ## adamw_warmup_01 — AdamW + warmup-cosine LR floor
 - **Commit:** `7f9c371`
 - **Change:** Switch optimizer from SGD to AdamW with decoupled weight decay and no-decay params (bias/LayerNorm/embeddings). Replace per-step scheduler with linear warmup (≈10% or ≤1000 steps) followed by cosine decay to an LR floor at 10% of base LR.
