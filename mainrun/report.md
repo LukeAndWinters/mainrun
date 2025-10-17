@@ -1810,3 +1810,24 @@ Label smoothing (ε=0.1) is a safe, effective regularizer: keeps best-val intact
 
 ### Strategic Impact
 Keeping vocab at 16k is preferable under the 7-epoch regime and current model; 32k likely increased token fragmentation benefits less than it increased sparsity and learning burden.
+
+## Final Conclusion
+
+- The strongest overall architecture within constraints is: GQA + RoPE + RMSNorm + Pre-LN + Residual Scaling + SwiGLU with 6 layers and d_model=512.
+- Warmup → cosine with tail squeeze, grad_accum_steps=2, and stability guards yielded smooth training.
+- Label smoothing (ε=0.1) preserved peak best-val while improving final stability and reducing rebound.
+- Tokenizer 32k underperformed vs 16k in the 7-epoch budget; keep 16k.
+
+### Best Peak Result (Experiment 14)
+- Best val loss: 1.209722
+- Final val loss: 1.261802
+- Rebound: 0.052080
+- Validation loss figure:
+![Exp14 Validation Loss](../docs/figures/Experiment_14_Grouped_Query_Attention_*/20251017_loss_val.png)
+
+### Best Final Stability (Experiment 17, ε=0.1)
+- Best val loss: 1.209958 (≈ tie)
+- Final val loss: 1.228282 (improved)
+- Rebound: ≈0.0183 (reduced)
+- Validation loss figure:
+![Exp17 Validation Loss](../docs/figures/Experiment_17_Label_Smoothing_*/20251017_loss_val.png)
