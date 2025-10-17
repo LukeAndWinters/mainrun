@@ -21,6 +21,21 @@ Label smoothing improves end-of-training behavior and reduces rebound while pres
 
 ## [2025-01-16] Experiment 16: Model Depth Scaling (n_layer=8)
 
+## [2025-01-17] Experiment 18: Tokenizer Vocabulary 32k
+
+### Added
+- Increased tokenizer vocab_size from 16k to 32k for comparison
+- Exported figures and documented results
+
+### Results
+- **Best Val Loss**: 1.223384 (worse than 16k best 1.209722/1.209958)
+- **Final Val Loss**: 1.253517 (worse than 1.228282 with 16k + LS)
+- **Rebound**: ~0.0301 (worse than ~0.0183)
+- **Overall**: Not beneficial; 16k preferred for this setup
+
+### Impact
+Larger vocab did not help within 7 epochs; keep vocab=16k as default.
+
 ### Added
 - Model depth scaling from n_layer=6 to n_layer=8
 - 33% increase in model depth and representational capacity

@@ -1774,3 +1774,39 @@ Depth scaling (n_layer=8) improved stability and final performance but **degrade
 
 ### Strategic Impact
 Label smoothing (ε=0.1) is a safe, effective regularizer: keeps best-val intact while improving end-of-training behavior. The best result remains from Experiment 14, but this run delivers a stronger final value and substantially lower rebound—good for robustness.
+
+## Experiment 18: Tokenizer Vocabulary Size (32k vs 16k)
+
+### Change Description
+**Before**: Byte-level BPE with vocab_size=16k (baseline tokenizer)
+**After**: Increase tokenizer vocab_size to 32k; all training settings unchanged
+
+### Technical Details
+- **Tokenizer**: BPE (byte-level), vocab_size=32,000
+- **Model/Training**: n_layer=6, d_model=512, GQA + RoPE + RMSNorm + Pre-LN + Residual Scaling + SwiGLU, lr=4.2e-3, warmup_pct=0.20, tail_squeeze on, grad_accum_steps=2, label_smoothing=0.1
+
+### Training Curve Analysis
+
+#### Validation Loss
+![Tokenizer 32k Validation Loss](../docs/figures/Experiment_18_Tokenizer_32k_20251017_071116_20251017_064244/20251017_loss_val.png)
+
+- **Best Performance**: 1.223384 (worse than 16k best 1.209722/1.209958)
+- **Final Performance**: 1.253517 (worse than 16k + LS final 1.228282)
+- **Rebound**: ~0.0301 (worse than LS ~0.0183)
+
+#### Training Loss
+![Tokenizer 32k Training Loss](../docs/figures/Experiment_18_Tokenizer_32k_20251017_071116_20251017_064244/20251017_loss_train.png)
+
+### Key Findings
+1. Larger vocab (32k) did not improve validation loss on this dataset/config
+2. Both best and final validation losses degraded vs 16k baseline
+3. Rebound increased vs label smoothing setup
+
+### Results Summary
+- **Best Val Loss**: 1.223384 (↓ vs 1.2097–1.2100)
+- **Final Val Loss**: 1.253517 (↓ vs 1.228282)
+- **Rebound**: ~0.0301 (↑ vs ~0.0183)
+- **Overall**: Not beneficial; 16k remains preferred
+
+### Strategic Impact
+Keeping vocab at 16k is preferable under the 7-epoch regime and current model; 32k likely increased token fragmentation benefits less than it increased sparsity and learning burden.
