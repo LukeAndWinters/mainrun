@@ -1,0 +1,7 @@
+.markdown-body { max-width: 920px; margin: 0 auto; padding: 24px; }
+img { max-width: 100%; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 6px 8px; }
+code, pre { font-size: 90%; }
+@page { margin: 16mm; }
+
